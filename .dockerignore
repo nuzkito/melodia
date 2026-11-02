@@ -1,0 +1,3 @@
+# The images don't copy the code (it is mounted as a volume), so the
+# build context needs no files.
+*

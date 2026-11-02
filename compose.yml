@@ -1,0 +1,176 @@
+# All commands run in containers: nothing is built or installed on the host.
+#
+#   docker compose run --rm test       # unit, integration and UI tests
+#   docker compose run --rm lint       # rustfmt + clippy
+#   docker compose run --rm smoke      # graphical smoke test (Xvfb) + screenshots in dist/screenshots
+#   docker compose run --rm build-dev      # only the .exe, fast, for trying changes
+#   docker compose run --rm build-release  # optimized .exe, installer, zip and hashes in dist/
+#   docker compose run --rm windows-smoke         # starts the .exe with Wine (optional)
+#   docker compose run --rm --service-ports app   # runs the app (Linux) through WSLg
+#   docker compose run --rm dev        # shell with the toolchain
+#   docker compose up -d web           # landing page (web/) on 127.0.0.1:8897, also the update server
+#   docker compose up -d browser       # Chromium + Firefox with Puppeteer, to check the landing page
+
+name: melodia
+
+x-build-args: &build-args
+  UID: ${HOST_UID:-1000}
+  GID: ${HOST_GID:-1000}
+
+x-rust: &rust
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    target: dev
+    args: *build-args
+  image: melodia-dev
+  working_dir: /app
+  volumes:
+    - .:/app
+    - cargo-registry:/home/dev/.cargo/registry
+    - cargo-git:/home/dev/.cargo/git
+    - target-linux:/app/target
+  environment:
+    RUST_BACKTRACE: "1"
+
+# The Windows builds (`build-dev` and `build-release`): one image and one cache.
+x-windows: &windows
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    target: windows
+    args: *build-args
+  image: melodia-windows
+  working_dir: /app
+  volumes:
+    - .:/app
+    - cargo-registry:/home/dev/.cargo/registry
+    - cargo-git:/home/dev/.cargo/git
+    - target-windows:/app/target
+  command: bash docker/build-windows.sh
+
+x-windows-env: &windows-env
+  # Optional: embeds your Client ID in the .exe, so that you do not have to paste it.
+  SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+  # Optional: the update manifest that the .exe checks. Empty: the published manifest. For the
+  # development copy in the `web` service, set http://127.0.0.1:8897/version.json.
+  MELODIA_UPDATE_URL: ${MELODIA_UPDATE_URL:-https://melodia.nuzkito.es/version.json}
+
+services:
+  test:
+    <<: *rust
+    # nextest runs all test binaries at the same time. .config/nextest.toml sets its output.
+    command: cargo nextest run --locked --all-targets
+
+  lint:
+    <<: *rust
+    command: bash -c "cargo fmt --all -- --check && cargo clippy --locked --all-targets -- -D warnings"
+
+  smoke:
+    <<: *rust
+    command: bash docker/smoke-test.sh
+
+  dev:
+    <<: *rust
+    command: bash
+    stdin_open: true
+    tty: true
+
+  # Runs the Linux version of the app on the WSLg display (Windows 11 / Windows 10 with WSLg). The
+  # Windows browser sends the login to http://127.0.0.1:8898/callback, which is published to the
+  # container.
+  app:
+    <<: *rust
+    # `fast` profile (no LTO, incremental): a change rebuilds in seconds, not in minutes.
+    command: cargo run --profile fast --locked
+    environment:
+      RUST_BACKTRACE: "1"
+      RUST_LOG: ${RUST_LOG:-melodia=info}
+      # Wayland through WSLg. With X11, Mesa cannot share memory with the WSLg X server, and it
+      # writes "Failed to attach to x11 shm" for each frame. DISPLAY is the fallback.
+      DISPLAY: ${DISPLAY:-:0}
+      WAYLAND_DISPLAY: wayland-0
+      XDG_RUNTIME_DIR: /mnt/wslg/runtime-dir
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      MELODIA_DEMO: ${MELODIA_DEMO:-}
+      MELODIA_CALLBACK_BIND: 0.0.0.0
+      MELODIA_CONFIG_DIR: /home/dev/.config/melodia
+      # In the Compose network, the landing page is `web`, not 127.0.0.1.
+      MELODIA_UPDATE_URL: http://web:80/version.json
+    depends_on:
+      - web
+    volumes:
+      - .:/app
+      - cargo-registry:/home/dev/.cargo/registry
+      - cargo-git:/home/dev/.cargo/git
+      - target-linux:/app/target
+      - app-config:/home/dev/.config/melodia
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /mnt/wslg:/mnt/wslg
+    ports:
+      - "127.0.0.1:8898:8898"
+
+  # Quick Windows build to try changes: the `fast` profile, only the .exe and the DLL. Also for
+  # clippy on the Windows code.
+  build-dev:
+    <<: *windows
+    environment:
+      <<: *windows-env
+      FAST: "1"
+
+  # Optimized Windows build to publish: the installer, the zip and SHA256SUMS.txt.
+  build-release:
+    <<: *windows
+    environment: *windows-env
+
+  # Optional: starts dist/melodia.exe with Wine and saves screenshots.
+  windows-smoke:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: wine
+      args: *build-args
+    image: melodia-wine
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: bash docker/windows-smoke-test.sh
+
+  # The landing page: serves web/ (plain HTML, CSS and JS, no build step) on 127.0.0.1:8897.
+  # docker/web/ holds its nginx configuration. In development, it also publishes the latest
+  # version of the app: web/version.json, which the open apps check. Edit that file to announce a
+  # new version.
+  web:
+    image: nginx:alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+      - ./docker/web:/etc/nginx/conf.d:ro
+    ports:
+      - "127.0.0.1:8897:80"
+
+  # Chromium and Firefox with Puppeteer, to check the landing page in real
+  # browsers: `docker compose exec -T browser node docker/web-screenshots.js`.
+  browser:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: browser
+      args: *build-args
+    image: melodia-browser
+    init: true
+    working_dir: /app
+    volumes:
+      - .:/app
+    # With the default 64 MB of Docker, Chromium does not have sufficient shared memory.
+    shm_size: 1gb
+    environment:
+      WEB_URL: http://web:80
+    depends_on:
+      - web
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  target-linux:
+  target-windows:
+  app-config:

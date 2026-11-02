@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-0.5 -0.5 1 1">
+  <!-- Melodia's icon, the source of the app's (src/icon.rs renders it). A dark
+       circle with a green glow, a border and an eighth note in a gradient
+       from purple through blue to green.
+
+       The circle has radius 0.5 around the origin and y goes down. The note
+       is drawn in its own measurements, then scaled and moved. Every part of
+       the note is exact (ellipses, straight lines) except its rounded
+       corners, which are cubic Béziers.
+
+       SVG mixes gradients in sRGB: the stops are close together so they mix
+       like in linear light. src/icon.rs reads the note's and the border's
+       gradients, and finds the parts by their ids (circle, border, note). -->
+  <defs>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="-0.12" cy="-0.14" r="0.62">
+      <stop offset="0" stop-color="#1a422a"/>
+      <stop offset="0.1" stop-color="#193f28"/>
+      <stop offset="0.2" stop-color="#183b26"/>
+      <stop offset="0.3" stop-color="#163824"/>
+      <stop offset="0.4" stop-color="#153422"/>
+      <stop offset="0.5" stop-color="#142f1f"/>
+      <stop offset="0.6" stop-color="#122b1c"/>
+      <stop offset="0.7" stop-color="#112519"/>
+      <stop offset="0.8" stop-color="#0f1f16"/>
+      <stop offset="0.9" stop-color="#0d1712"/>
+      <stop offset="1" stop-color="#0b0b0e"/>
+    </radialGradient>
+    <linearGradient id="border-ink" gradientUnits="userSpaceOnUse" x1="0.29351" y1="-0.40479" x2="-0.29351" y2="0.40479">
+      <stop offset="0" stop-color="#d71ec8"/>
+      <stop offset="0.05" stop-color="#cb34cd"/>
+      <stop offset="0.1" stop-color="#be43d1"/>
+      <stop offset="0.15" stop-color="#b04fd6"/>
+      <stop offset="0.2" stop-color="#a059da"/>
+      <stop offset="0.25" stop-color="#8d62df"/>
+      <stop offset="0.3" stop-color="#776ae3"/>
+      <stop offset="0.35" stop-color="#5b71e7"/>
+      <stop offset="0.4" stop-color="#2878eb"/>
+      <stop offset="0.45" stop-color="#2783e3"/>
+      <stop offset="0.5" stop-color="#278edb"/>
+      <stop offset="0.55" stop-color="#2697d3"/>
+      <stop offset="0.6" stop-color="#25a0ca"/>
+      <stop offset="0.65" stop-color="#24a8c1"/>
+      <stop offset="0.7" stop-color="#23b0b7"/>
+      <stop offset="0.75" stop-color="#23b7ac"/>
+      <stop offset="0.8" stop-color="#22bea1"/>
+      <stop offset="0.85" stop-color="#21c594"/>
+      <stop offset="0.9" stop-color="#20cb85"/>
+      <stop offset="0.95" stop-color="#1fd175"/>
+      <stop offset="1" stop-color="#1ed760"/>
+    </linearGradient>
+    <linearGradient id="note-ink" gradientUnits="userSpaceOnUse" x1="0.13094" y1="-0.25575" x2="-0.21094" y2="0.21575">
+      <stop offset="0" stop-color="#d71ec8"/>
+      <stop offset="0.05" stop-color="#cb34cd"/>
+      <stop offset="0.1" stop-color="#be43d1"/>
+      <stop offset="0.15" stop-color="#b04fd6"/>
+      <stop offset="0.2" stop-color="#a059da"/>
+      <stop offset="0.25" stop-color="#8d62df"/>
+      <stop offset="0.3" stop-color="#776ae3"/>
+      <stop offset="0.35" stop-color="#5b71e7"/>
+      <stop offset="0.4" stop-color="#2878eb"/>
+      <stop offset="0.45" stop-color="#2783e3"/>
+      <stop offset="0.5" stop-color="#278edb"/>
+      <stop offset="0.55" stop-color="#2697d3"/>
+      <stop offset="0.6" stop-color="#25a0ca"/>
+      <stop offset="0.65" stop-color="#24a8c1"/>
+      <stop offset="0.7" stop-color="#23b0b7"/>
+      <stop offset="0.75" stop-color="#23b7ac"/>
+      <stop offset="0.8" stop-color="#22bea1"/>
+      <stop offset="0.85" stop-color="#21c594"/>
+      <stop offset="0.9" stop-color="#20cb85"/>
+      <stop offset="0.95" stop-color="#1fd175"/>
+      <stop offset="1" stop-color="#1ed760"/>
+    </linearGradient>
+  </defs>
+  <circle id="circle" r="0.5" fill="url(#glow)"/>
+  <circle id="border" r="0.47585" fill="none" stroke="url(#border-ink)" stroke-width="0.0483"/>
+  <path id="note" transform="translate(0.002 0.019) scale(1.15)" fill="url(#note-ink)"
+        d="M -0.00407 0.07795 L -0.00407 -0.30276 C -0.00407 -0.31452 0.00172 -0.31671 0.00985 -0.31344 A 0.36 0.24 0 0 1 0.16848 -0.03887 C 0.16584 -0.03302 0.15525 -0.01342 0.15046 -0.02053 C 0.14855 -0.02335 0.1481 -0.02969 0.1475 -0.04075 A 0.36 0.24 0 0 0 0.05185 -0.19508 C 0.04192 -0.20223 0.03793 -0.19672 0.03793 -0.18462 L 0.03793 0.15181 A 0.118 0.083 -24.06423 1 1 -0.01798 0.08843 C -0.0062 0.09131 -0.00407 0.0853 -0.00407 0.07795 Z"/>
+</svg>

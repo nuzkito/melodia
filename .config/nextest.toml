@@ -1,0 +1,11 @@
+# cargo-nextest settings, for `docker compose run --rm test`.
+# https://nexte.st/docs/configuration/
+
+[profile.default]
+# During the run, only failing tests show (in full at the end), and the slow tests show in the
+# final summary. Thus a run with no failures stays short.
+status-level = "fail"
+final-status-level = "slow"
+failure-output = "final"
+# Mark tests over 5 s as slow. The backend tests wait for real timers.
+slow-timeout = "5s"

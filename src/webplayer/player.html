@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Melodia · web player</title>
+<style>
+  html, body { margin: 0; background: #0b0b0e; color: #a6a6b4; font: 13px "Segoe UI", system-ui, sans-serif; }
+  main { padding: 16px; }
+  pre { white-space: pre-wrap; color: #f2f2f7; }
+</style>
+</head>
+<body>
+<main>
+  <p>Melodia web player (Spotify Web Playback SDK). This window is normally hidden.</p>
+  <pre id="log"></pre>
+</main>
+<script>
+"use strict";
+(() => {
+  // Messages to Melodia: one JSON object per message (see src/webplayer/mod.rs).
+  const send = (message) => window.ipc.postMessage(JSON.stringify(message));
+  const output = document.getElementById("log");
+  const log = (message) => {
+    output.textContent += message + "\n";
+    send({ type: "log", message: String(message) });
+  };
+  const fail = (kind, message) => {
+    output.textContent += "ERROR " + kind + ": " + message + "\n";
+    send({ type: "error", kind, message: String(message) });
+  };
+
+  window.addEventListener("error", (event) => fail("script", event.message));
+  window.addEventListener("unhandledrejection", (event) => fail("script", String(event.reason)));
+  log("Browser: " + navigator.userAgent);
+
+  // The SDK plays DRM-protected audio (Widevine): report early if it is missing.
+  if (!navigator.requestMediaKeySystemAccess) {
+    fail("drm", "This WebView does not support protected content (EME).");
+  } else {
+    navigator
+      .requestMediaKeySystemAccess("com.widevine.alpha", [{
+        initDataTypes: ["cenc"],
+        audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
+      }])
+      .then(() => log("Widevine available"), (error) => fail("drm", "Widevine not available: " + error));
+  }
+
+  // The tokens come from Melodia through `window.melodia.deliverToken`.
+  let waitingForToken = [];
+  window.melodia = {
+    deliverToken(token) {
+      const callbacks = waitingForToken;
+      waitingForToken = [];
+      callbacks.forEach((callback) => callback(token));
+    },
+    // Melodia calls this when the app is about to close. If the music plays here, the page pauses
+    // it, because then the SDK tells Spotify the position. If not, the page closes without a
+    // message, and Spotify goes back to an older position.
+    async prepareToClose() {
+      try {
+        const player = window.melodia.player;
+        const state = player ? await player.getCurrentState() : null;
+        if (state && !state.paused) {
+          await pauseWithFade(player);
+          log("Paused before closing, at " + Math.round(state.position / 1000) + " s");
+        }
+      } catch (error) {
+        log("Could not pause before closing: " + error);
+      }
+      send({ type: "ready_to_close" });
+    },
+    // The volume that the user selects in Melodia (0..100). The SDK applies it here, without a
+    // Web API request. Before the player exists, the page keeps it to create the player with it.
+    setVolume(percent) {
+      volume = gainOf(percent);
+      const player = window.melodia.player;
+      if (player) {
+        // During a fade, the next step already uses the new volume.
+        applyLevel(player).catch((error) => log("Could not set the volume: " + error));
+      }
+    },
+    // A player command (`PageControl` in src/webplayer/mod.rs) that the SDK does here, without a
+    // Web API request. If it fails, Melodia sends it through the Web API.
+    // A media key on the keyboard (Melodia gets it, not the browser, so play and pause fade
+    // for all windows that have the focus).
+    mediaKey(key) {
+      const player = window.melodia.player;
+      log("Media key: " + key);
+      if (!player) {
+        return;
+      }
+      if (key === "play_pause") {
+        player.togglePlay().catch((error) => log("Could not toggle from a media key: " + error));
+      } else {
+        window.melodia.control(key);
+      }
+    },
+    control(action, position) {
+      const player = window.melodia.player;
+      const failed = (message) => {
+        log("Could not " + action + ": " + message);
+        send({ type: "control_failed", action, position: position ?? null, message: String(message) });
+      };
+      const calls = {
+        resume: () => resumeWithFade(player),
+        pause: () => pauseWithFade(player),
+        fade_in: () => armFadeIn(player),
+        next: () => player.nextTrack(),
+        previous: () => player.previousTrack(),
+        seek: () => player.seek(position),
+      };
+      if (!player || !calls[action]) {
+        failed(player ? "unknown command" : "the player is not ready");
+        return;
+      }
+      calls[action]().catch(failed);
+    },
+  };
+
+  // The Spotify ID in `uri`, if it is a `spotify:<kind>:<id>` URI.
+  const idOf = (uri, kind) => {
+    const parts = typeof uri === "string" ? uri.split(":") : [];
+    return parts.length === 3 && parts[1] === kind ? parts[2] : null;
+  };
+  // An SDK track in the Web API format, which Melodia already reads (it skips types that it does
+  // not support, for example episodes and ads).
+  const describe = (track) => track && {
+    type: track.type || "track",
+    uri: track.uri,
+    name: track.name || "",
+    duration_ms: Math.round(track.duration_ms || 0),
+    artists: (track.artists || []).map((artist) => ({
+      name: artist.name || "",
+      id: idOf(artist.uri, "artist"),
+    })),
+    album: track.album ? {
+      name: track.album.name || "",
+      id: idOf(track.album.uri, "album"),
+      images: (track.album.images || []).map((image) => ({ url: image.url, width: image.width ?? null })),
+    } : null,
+  };
+
+  // The volume of the SDK is a linear gain, but the ear hears loudness logarithmically. A linear
+  // 1 % sounds like approximately 30 % in Spotify's apps. Thus the percentage goes through a
+  // curve (gain = p⁴), near to what Spotify's own apps do.
+  const VOLUME_CURVE = 4;
+  const gainOf = (percent) => {
+    const fraction = Math.min(100, Math.max(0, Number(percent) || 0)) / 100;
+    return fraction ** VOLUME_CURVE;
+  };
+
+  // The volume that the user set last time (`?volume=0..100`), or full volume.
+  const asked = Number(new URLSearchParams(location.search).get("volume") ?? 100);
+  const savedVolume = Number.isFinite(asked) ? Math.min(100, Math.max(0, asked)) : 100;
+  let volume = gainOf(savedVolume);
+
+  // «Play» and «Pause» fade the music in and out, and do not cut it. This also applies when the
+  // app closes, and to a resume that sends the queue again. A track that starts or ends, next,
+  // previous and seek do not fade.
+  // `level` (0..1, on the same curve as the volume) scales the user's volume. It is 1, but not
+  // during a fade.
+  const FADE_MS = 150;
+  const FADE_STEP_MS = 20;
+  let level = 1;
+  // Each fade gets a new number. A newer «play» or «pause» stops the older fade.
+  let fade = 0;
+  const applyLevel = (player) => player.setVolume(volume * level ** VOLUME_CURVE);
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  // Moves `level` to `target` in `FADE_MS`. False if a newer fade started.
+  const fadeTo = async (player, id, target) => {
+    const start = level;
+    const steps = Math.max(1, Math.round((FADE_MS * Math.abs(target - start)) / FADE_STEP_MS));
+    for (let step = 1; step <= steps; step++) {
+      if (fade !== id) {
+        return false;
+      }
+      level = start + ((target - start) * step) / steps;
+      await applyLevel(player);
+      if (step < steps) {
+        await wait(FADE_STEP_MS);
+      }
+    }
+    return fade === id;
+  };
+  // The SDK's own `pause` and `resume`, which the page replaces with the fading functions (see
+  // `fadeEveryPlayAndPause`).
+  const nativeCall = (player, name) => (player["native_" + name] || player[name]).call(player);
+  // The time limit for a change of play/pause to be from Melodia. Thus the page does not think
+  // that it came from a different source (a media key, a different app, a phone).
+  let ownUntil = 0;
+  const own = () => {
+    ownUntil = Date.now() + 1500;
+  };
+  const pauseWithFade = async (player) => {
+    const id = ++fade;
+    own();
+    try {
+      if (!(await fadeTo(player, id, 0))) {
+        // A «play» came during the fade: the music continues to play.
+        return;
+      }
+      await nativeCall(player, "pause");
+    } finally {
+      own();
+      // Back to the full volume, so that the user hears the next music (a new track…).
+      if (fade === id) {
+        level = 1;
+        await applyLevel(player);
+      }
+    }
+  };
+  const resumeWithFade = async (player) => {
+    const id = ++fade;
+    own();
+    try {
+      // Silent first, if it does not still play (a «pause» that fades out).
+      const state = await player.getCurrentState();
+      if (fade !== id) {
+        return;
+      }
+      if (state && state.paused) {
+        level = 0;
+        await applyLevel(player);
+      }
+      if (fade !== id) {
+        // A «pause» came in the meantime: the music already stays paused.
+        return;
+      }
+      await nativeCall(player, "resume");
+      await fadeTo(player, id, 1);
+      own();
+    } catch (error) {
+      if (fade === id) {
+        level = 1;
+        await applyLevel(player).catch(() => {});
+      }
+      throw error;
+    }
+  };
+
+  // A «play» that Melodia does with a Web API request (a resume that sends the full queue again)
+  // restarts the track. Make it silent first, and fade it in when the SDK reports that it plays.
+  // If that does not occur, the volume comes back after `FADE_IN_WAIT_MS`.
+  const FADE_IN_WAIT_MS = 5000;
+  let fadeInArmed = false;
+  const armFadeIn = async (player) => {
+    const id = ++fade;
+    own();
+    fadeInArmed = true;
+    level = 0;
+    await applyLevel(player);
+    setTimeout(async () => {
+      if (fadeInArmed && fade === id) {
+        fadeInArmed = false;
+        level = 1;
+        await applyLevel(player).catch(() => {});
+      }
+    }, FADE_IN_WAIT_MS);
+  };
+  const fadeInIfArmed = (player, state) => {
+    if (!fadeInArmed || !state || state.paused) {
+      return;
+    }
+    fadeInArmed = false;
+    own();
+    const id = ++fade;
+    fadeTo(player, id, 1)
+      .catch((error) => log("Could not fade in: " + error));
+  };
+
+  // All calls from the page to the SDK's `pause`, `resume` or `togglePlay` get the fade. Play and
+  // pause from a different device go directly to the SDK, and the page cannot stop them.
+  // `fadeInExternalResume` makes at least the start softer.
+  const fadeEveryPlayAndPause = (player) => {
+    player.native_pause = player.pause.bind(player);
+    player.native_resume = player.resume.bind(player);
+    player.native_togglePlay = player.togglePlay.bind(player);
+    player.pause = () => pauseWithFade(player);
+    player.resume = () => resumeWithFade(player);
+    player.togglePlay = async () => {
+      const state = await player.getCurrentState();
+      if (!state) {
+        return undefined; // the music is not playing in this app
+      }
+      return state.paused ? resumeWithFade(player) : pauseWithFade(player);
+    };
+  };
+  // The same track starts to play again, and Melodia did not ask for it. The page makes the volume
+  // silent immediately and fades it in. (A pause from outside already occurred when the page
+  // knows about it, so the page cannot do this for a pause.)
+  let wasPaused = null;
+  let pausedTrack = null;
+  const fadeInExternalResume = (player, state) => {
+    if (!state) {
+      return;
+    }
+    const uri = state.track_window && state.track_window.current_track && state.track_window.current_track.uri;
+    const resumed = wasPaused === true && !state.paused && uri === pausedTrack;
+    wasPaused = state.paused;
+    pausedTrack = uri;
+    if (resumed && Date.now() > ownUntil && !fadeInArmed) {
+      log("Play from outside the page: fading in");
+      own();
+      const id = ++fade;
+      level = 0;
+      applyLevel(player)
+        .then(() => fadeTo(player, id, 1))
+        .catch((error) => log("Could not fade in: " + error));
+    }
+  };
+
+  // The browser's media session. The SDK's own media session, in an iframe that the page cannot
+  // get to, would play and pause without a fade. Thus it is off (`enableMediaSession: false`), and
+  // the page keeps a media session with the fading play and pause. (Melodia gets the media keys
+  // of the keyboard, and they arrive through `window.melodia.mediaKey`.)
+  const takeMediaKeys = (player) => {
+    const session = navigator.mediaSession;
+    if (!session) {
+      return;
+    }
+    const handlers = {
+      play: () => resumeWithFade(player),
+      pause: () => pauseWithFade(player),
+      nexttrack: () => player.nextTrack(),
+      previoustrack: () => player.previousTrack(),
+    };
+    for (const [action, handler] of Object.entries(handlers)) {
+      try {
+        session.setActionHandler(action, () => {
+          log("Media key: " + action);
+          handler().catch((error) => log("Could not " + action + " from a media key: " + error));
+        });
+      } catch (error) {
+        log("Could not take the " + action + " media key: " + error);
+      }
+    }
+  };
+  // What the media controls of the system show for the current track.
+  const showInMediaSession = (state) => {
+    const session = navigator.mediaSession;
+    const track = state && state.track_window && state.track_window.current_track;
+    if (!session || !track) {
+      return;
+    }
+    try {
+      session.playbackState = state.paused ? "paused" : "playing";
+      session.metadata = new MediaMetadata({
+        title: track.name || "",
+        artist: (track.artists || []).map((artist) => artist.name).join(", "),
+        album: (track.album && track.album.name) || "",
+        artwork: ((track.album && track.album.images) || []).map((image) => ({ src: image.url })),
+      });
+    } catch (error) {
+      log("Could not update the media session: " + error);
+    }
+  };
+
+  window.onSpotifyWebPlaybackSDKReady = () => {
+    log("Spotify SDK loaded (volume " + savedVolume + " %, gain " + volume.toFixed(4) + ")");
+    const player = new Spotify.Player({
+      name: "Melodia",
+      getOAuthToken: (callback) => {
+        waitingForToken.push(callback);
+        send({ type: "need_token" });
+      },
+      volume,
+      enableMediaSession: false,
+    });
+    player.addListener("ready", ({ device_id }) => {
+      log("Device ready: " + device_id);
+      send({ type: "ready", device_id });
+    });
+    player.addListener("not_ready", ({ device_id }) => send({ type: "not_ready", device_id }));
+    for (const kind of ["initialization_error", "authentication_error", "account_error", "playback_error"]) {
+      player.addListener(kind, ({ message }) => fail(kind, message));
+    }
+    player.addListener("autoplay_failed", () => fail("autoplay_failed", "The browser blocked autoplay."));
+    // A report of the playback state. The page also sends it sometimes while a different device
+    // plays. `here` tells Melodia if the music is in this app.
+    const report = async (state) => {
+      if (!state) {
+        send({ type: "inactive" });
+        return;
+      }
+      // `getCurrentState` has a state only when the music plays on this SDK. Thus Melodia knows
+      // where the music plays and does not ask Spotify.
+      let here = null;
+      try {
+        here = (await player.getCurrentState()) !== null;
+      } catch (error) {
+        log("Could not tell where the music plays: " + error);
+      }
+      if (here) {
+        showInMediaSession(state);
+      }
+      const window_ = state.track_window || {};
+      const track = window_.current_track;
+      send({
+        type: "state",
+        paused: state.paused,
+        position: Math.round(state.position),
+        track_uri: track ? track.uri : null,
+        shuffle: typeof state.shuffle === "boolean" ? state.shuffle : null,
+        track: describe(track) || null,
+        linked_from: (track && track.linked_from && track.linked_from.uri) || null,
+        // Only the first two or three: this is sufficient to know if Melodia's view of Spotify's
+        // queue is still correct.
+        next_uris: Array.isArray(window_.next_tracks) ? window_.next_tracks.map((next) => next.uri) : null,
+        here,
+      });
+    };
+    // One after the other, so that they get to Melodia in order, although each one waits for
+    // `getCurrentState`.
+    let reporting = Promise.resolve();
+    player.addListener("player_state_changed", (state) => {
+      fadeInIfArmed(player, state);
+      fadeInExternalResume(player, state);
+      reporting = reporting.then(() => report(state)).catch((error) => fail("script", String(error)));
+    });
+    player.connect().then((connected) => {
+      if (connected) {
+        log("Connected to Spotify");
+      } else {
+        fail("connect", "The SDK could not connect to Spotify.");
+      }
+    });
+    window.melodia.player = player;
+    fadeEveryPlayAndPause(player);
+    takeMediaKeys(player);
+  };
+
+  const sdk = document.createElement("script");
+  sdk.src = "https://sdk.scdn.co/spotify-player.js";
+  sdk.onerror = () => fail("network", "Could not download the Spotify SDK (sdk.scdn.co).");
+  document.body.appendChild(sdk);
+})();
+</script>
+</body>
+</html>

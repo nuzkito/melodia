@@ -1,0 +1,760 @@
+/* Melodia's landing page. Colors, radii, spacing and motion come from docs/design.md. The
+   backdrop is the backdrop of the app (backdrop.rs). main.js turns its hue with the scroll. */
+
+:root {
+  color-scheme: dark;
+
+  /* theme.rs */
+  --bg: rgb(11 11 14);
+  --surface: rgb(23 23 29);
+  --surface-hover: rgb(32 32 40);
+  --border: rgb(42 42 52);
+  --text: rgb(242 242 247);
+  --text-dim: rgb(166 166 180);
+  --text-faint: rgb(128 128 142);
+  --focus-ring: rgb(206 206 210 / 0.85);
+  --dark-ink: rgb(8 8 10);
+
+  --radius-small: 4px;
+  --radius-medium: 6px;
+  --radius-large: 8px;
+
+  /* The tint, as "r g b": the accent and the light at the center of each glow. main.js changes
+     them. These start values (Spotify green) stay without scripts or with reduced motion. */
+  --accent: 30 215 96;
+  --light-accent: 3.8 40.8 16.4;
+  --light-complement: 28.56 2.66 26.04;
+  /* The two other stops of the title gradient: a quarter turn and half a turn from the accent. */
+  --quarter: 30 135 215;
+  --complement: 215 30 200;
+
+  /* anim.rs: ease-out cubic */
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+
+  --font: Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Tinted with the accent, as the scroll bars of the app. */
+  scrollbar-color: rgb(var(--accent) / 0.45) var(--bg);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.6 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* --- Backdrop ------------------------------------------------------------ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg);
+  isolation: isolate;
+  /* The larger side of the window, as `glows` in backdrop.rs. */
+  --size: max(100vw, 100vh);
+}
+
+/* Each glow adds light to the base, as in the app. The stops sample `falloff` of backdrop.rs
+   from the center to its reach (1.1 radii). */
+.glow {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: plus-lighter;
+  --falloff:
+    rgb(var(--light) / 0.9570) 0%,
+    rgb(var(--light) / 0.9302) 4.55%,
+    rgb(var(--light) / 0.8711) 9.09%,
+    rgb(var(--light) / 0.8067) 13.64%,
+    rgb(var(--light) / 0.7422) 18.18%,
+    rgb(var(--light) / 0.6778) 22.73%,
+    rgb(var(--light) / 0.6133) 27.27%,
+    rgb(var(--light) / 0.5489) 31.82%,
+    rgb(var(--light) / 0.4855) 36.36%,
+    rgb(var(--light) / 0.4288) 40.91%,
+    rgb(var(--light) / 0.3829) 45.45%,
+    rgb(var(--light) / 0.3436) 50%,
+    rgb(var(--light) / 0.3055) 54.55%,
+    rgb(var(--light) / 0.2673) 59.09%,
+    rgb(var(--light) / 0.2291) 63.64%,
+    rgb(var(--light) / 0.1909) 68.18%,
+    rgb(var(--light) / 0.1527) 72.73%,
+    rgb(var(--light) / 0.1145) 77.27%,
+    rgb(var(--light) / 0.0764) 81.82%,
+    rgb(var(--light) / 0.0398) 86.36%,
+    rgb(var(--light) / 0.0127) 90.91%,
+    rgb(var(--light) / 0.0016) 95.45%,
+    rgb(var(--light) / 0) 100%;
+}
+
+.glow-accent {
+  --light: var(--light-accent);
+  background: radial-gradient(circle calc(var(--size) * 0.75 * 1.1) at 22% 42%, var(--falloff));
+}
+
+.glow-complement {
+  --light: var(--light-complement);
+  background: radial-gradient(circle calc(var(--size) * 0.6 * 1.1) at 100% 100%, var(--falloff));
+}
+
+/* --- Shared pieces ------------------------------------------------------- */
+
+a {
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 0.16s var(--ease-out), text-decoration-color 0.16s var(--ease-out);
+}
+
+a:hover {
+  color: var(--text);
+  text-decoration-color: var(--text-dim);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+strong {
+  font-weight: 600;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 1px 6px;
+  border-radius: var(--radius-small);
+  background: rgb(255 255 255 / 0.055);
+}
+
+/* widgets::pill_button: on hover and press, only the fill changes. The text does not move. */
+.pill {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 24px;
+  border-radius: 999px;
+  color: var(--dark-ink);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--text);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  transition: transform 0.16s var(--ease-out), background-color 0.16s var(--ease-out);
+}
+
+.pill:hover {
+  color: var(--dark-ink);
+}
+
+.pill:hover::before {
+  transform: scaleX(1.05);
+  background: color-mix(in srgb, var(--text), white 12%);
+}
+
+.pill:active::before {
+  transform: scaleX(0.96);
+  transition-duration: 0.08s;
+}
+
+.pill-icon {
+  flex: none;
+  margin: 0 10px 0 -4px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The version is a segment of its own, after a thin divider. */
+.pill-version {
+  margin-left: 14px;
+  padding-left: 14px;
+  border-left: 1px solid rgb(8 8 10 / 0.18);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+
+.pill:focus-visible {
+  outline-offset: 2px;
+}
+
+/* widgets::text_button */
+.text-button {
+  font-size: 15px;
+  text-decoration: none;
+  border-radius: var(--radius-medium);
+}
+
+/* As previous / next in the app: on hover, the glyph moves 2 px in its direction. */
+.text-button-down {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.text-button-down svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.16s var(--ease-out);
+}
+
+.text-button-down:hover svg {
+  transform: translateY(2px);
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+main {
+  max-width: 1168px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: clamp(40px, 8vh, 80px);
+  text-align: center;
+}
+
+/* The icon over the name. The halo behind the icon has the tint of the backdrop. */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  border-radius: var(--radius-large);
+}
+
+.brand:hover {
+  color: var(--text);
+}
+
+.brand-mark {
+  position: relative;
+  display: block;
+  width: 96px;
+  height: 96px;
+}
+
+.brand-mark::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--accent) / 0.32),
+    rgb(var(--complement) / 0.12) 55%,
+    transparent
+  );
+}
+
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.45));
+}
+
+h1 {
+  margin: 32px 0 0;
+  font-size: clamp(44px, 8vw, 84px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+/* From the accent to the complementary color through a quarter turn, as the ring of the icon. A
+   direct mix of two opposite hues goes through gray. White makes all hues light enough to read. */
+.tinted {
+  /* Space for the descender: background-clip cuts the text at the box of the line. */
+  padding-bottom: 0.08em;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, rgb(var(--accent)), white 30%),
+    color-mix(in srgb, rgb(var(--quarter)), white 30%),
+    color-mix(in srgb, rgb(var(--complement)), white 30%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.subtitle {
+  max-width: 34em;
+  margin: 20px 0 0;
+  color: var(--text-dim);
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px 32px;
+  margin-top: 36px;
+}
+
+.pill-download {
+  height: 50px;
+  padding: 0 26px;
+}
+
+.hint {
+  margin: 18px 0 0;
+  color: var(--text-faint);
+  font-size: 13px;
+  text-wrap: balance;
+}
+
+.hint > span {
+  margin: 0 8px;
+}
+
+/* The window, with its shadow (docs/design.md «Elevation»). */
+.shot {
+  width: 100%;
+  margin: clamp(48px, 8vh, 72px) auto 0;
+  max-width: 1200px;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.59);
+}
+
+/* --- Guide --------------------------------------------------------------- */
+
+.guide {
+  max-width: 720px;
+  margin: 128px auto 0;
+  scroll-margin-top: 32px;
+}
+
+.guide > h2 {
+  margin: 0;
+  font-size: clamp(26px, 3.4vw, 34px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/* As the notices of the app (toasts.rs): a card with a dot in the accent. */
+.notice {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 14px 26px 14px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  background: var(--surface-hover);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.55);
+}
+
+.notice .dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--accent));
+  transform: translateY(-1px);
+}
+
+.notice p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 15px;
+}
+
+.notice strong {
+  color: var(--text);
+}
+
+/* Not a step: a card without a number. The prerequisites come before the list, and the check of
+   the download comes after it. */
+.requirements,
+.check {
+  margin-top: 40px;
+  padding: 22px 24px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large);
+  background:
+    linear-gradient(135deg, rgb(var(--accent) / 0.08), transparent 60%),
+    rgb(23 23 29 / 0.6);
+}
+
+/* The last step already has space below it. */
+.check {
+  margin-top: 4px;
+}
+
+.requirements h3,
+.check h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.requirements p,
+.check p {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+}
+
+.needs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.need {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+}
+
+.need span {
+  display: grid;
+  gap: 2px;
+  line-height: 1.3;
+}
+
+.need strong {
+  font-weight: 600;
+}
+
+.need small {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.need-icon {
+  flex: none;
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* In a tile, the logo is the icon. Its clear space (half the height of the Spotify icon) stays
+   as the gap. */
+.need .spotify-logo {
+  flex: none;
+  width: 80px;
+  padding: 0;
+  margin: 0;
+}
+
+.steps {
+  list-style: none;
+  counter-reset: step;
+  margin: 40px 0 0;
+  padding: 0;
+}
+
+.step {
+  position: relative;
+  counter-increment: step;
+  padding: 0 0 36px 52px;
+}
+
+/* The line between the numbers. */
+.step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 38px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--border);
+}
+
+.step::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgb(var(--accent) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.45);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.step h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 30px;
+}
+
+.step p {
+  margin: 8px 0 0;
+  color: var(--text-dim);
+}
+
+.step strong,
+.step em {
+  color: var(--text);
+}
+
+/* Links in running text: always underlined, with the line in the accent. The accent as text can
+   be too dark at some hues. */
+.step p a,
+.check p a,
+.hint a,
+.bottom a {
+  color: var(--text);
+  text-decoration-color: rgb(var(--accent) / 0.7);
+  text-decoration-thickness: 1.5px;
+}
+
+.step p a:hover,
+.check p a:hover,
+.hint a:hover,
+.bottom a:hover {
+  text-decoration-color: var(--text);
+}
+
+/* Spotify's logo (docs/design.md «Spotify's logo»). The padding is its clear space. The
+   negative margin aligns the logo itself with the text. */
+.spotify-logo {
+  display: block;
+  width: 160px;
+  height: auto;
+  padding: 11px;
+  margin: 2px 0 -6px -11px;
+  box-sizing: content-box;
+}
+
+/* The boxed field of the forms of the app. */
+.copy-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+}
+
+.copy-field code {
+  min-width: 0;
+  padding: 0;
+  background: none;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.copy {
+  flex: none;
+  margin-left: auto;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-medium);
+  background: rgb(255 255 255 / 0.055);
+  color: var(--text-faint);
+  font: 600 13px var(--font);
+  cursor: pointer;
+  transition: color 0.16s var(--ease-out), background-color 0.16s var(--ease-out);
+}
+
+.copy:hover {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.1);
+}
+
+.copy.copied {
+  color: rgb(var(--accent));
+  background: rgb(var(--accent) / 0.14);
+  animation: copy-press 0.36s var(--ease-out);
+}
+
+/* A copy: a band of light crosses the address, and a ghost of it rises out of the field. */
+.copy-field code.copied {
+  background: linear-gradient(90deg, transparent 33%, rgb(var(--accent) / 0.3) 50%, transparent 67%)
+    no-repeat 100% 0 / 300% 100%;
+  border-radius: var(--radius-small);
+  animation: copy-sweep 0.7s var(--ease-out);
+}
+
+.copy-ghost {
+  position: absolute;
+  color: rgb(var(--accent));
+  pointer-events: none;
+  animation: copy-lift 0.7s var(--ease-out) forwards;
+}
+
+@keyframes copy-press {
+  35% {
+    transform: scale(0.92);
+  }
+
+  70% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes copy-sweep {
+  from {
+    background-position: 100% 0;
+  }
+
+  40% {
+    color: rgb(var(--accent));
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}
+
+@keyframes copy-lift {
+  from {
+    opacity: 0.8;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-26px) scale(0.97);
+  }
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 1168px;
+  margin: 64px auto 0;
+  padding: 32px 24px 48px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+/* Spotify's brand guidelines ask for this statement. It goes on its own line below the links. */
+.disclaimer {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  text-align: center;
+}
+
+/* --- Entrance: as the empty states of the app ---------------------------- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.hero > * {
+  animation: rise 0.4s var(--ease-out) backwards;
+}
+
+.hero > :nth-child(2) { animation-delay: 0.05s; }
+.hero > :nth-child(3) { animation-delay: 0.08s; }
+.hero > :nth-child(4) { animation-delay: 0.11s; }
+.hero > :nth-child(5) { animation-delay: 0.14s; }
+.hero > :nth-child(6) { animation-delay: 0.2s; }
+
+/* --- Narrow screens ------------------------------------------------------ */
+
+@media (max-width: 820px) {
+  .guide {
+    margin-top: 88px;
+  }
+}
+
+@media (max-width: 480px) {
+  .step {
+    padding-left: 44px;
+  }
+
+  .notice {
+    padding: 14px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

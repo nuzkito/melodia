@@ -1,0 +1,108 @@
+[package]
+name = "melodia"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "A desktop player for Spotify on Windows"
+license = "MIT"
+publish = false
+default-run = "melodia"
+
+[dependencies]
+# wgpu (DirectX 12 / Vulkan) by default, OpenGL (glow) as a fallback.
+eframe = { version = "0.37", features = ["glow"] }
+egui = "0.37"
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "query", "rustls", "http2"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+sha2 = "0.11"
+base64 = "0.23"
+rand = "0.10"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "ico"] }
+directories = "6"
+open = "5"
+thiserror = "2"
+log = "0.4"
+# Without `regex`: `RUST_LOG` needs only module and level filters, not `/pattern` (saves ~1 MB).
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+memmap2 = "0.9"
+# Renders the app icon (assets/icon.svg). Without text or raster images, which it does not use.
+resvg = { version = "0.49", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+# «Play in this app»: a hidden WebView2 with the Spotify Web Playback
+# SDK, in a hidden window of the app (same process).
+wry = { version = "0.57", default-features = false, features = ["devtools"] }
+# The hidden window that holds that WebView2, and the encryption of the session file.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security_Cryptography",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Tuned for size: fat LTO with one codegen unit and `opt-level = "s"` decrease the Windows .exe
+# from ~24 MB to ~14 MB, but release builds are slower. `panic = "abort"` would save more, but
+# then a panic in any thread would close the full app (now the other threads continue, see
+# `util::lock`).
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+strip = true
+
+# Quick Windows builds to try changes (`docker compose run --rm build-dev`). With the speed
+# settings and incremental builds, a change rebuilds in seconds, not in ~2 min, but the .exe is
+# larger. It has its own profile, so that it does not invalidate `release`.
+[profile.fast]
+inherits = "release"
+opt-level = 3
+lto = false
+codegen-units = 16
+incremental = true
+
+# Test binaries keep only file and line (sufficient for backtraces). Full debug info made them
+# several times larger and slower to link.
+[profile.test]
+debug = "line-tables-only"
+
+# These crates lay out and rasterize text. Without optimization, the first text that each egui
+# context draws takes ~90 ms, and each UI test paid this (each test builds its own context). The
+# optimization costs a little one time, in a clean build. Changes to Melodia rebuild as fast as
+# before.
+[profile.dev.package]
+epaint.opt-level = 3
+skrifa.opt-level = 3
+read-fonts.opt-level = 3
+font-types.opt-level = 3
+harfrust.opt-level = 3
+vello_cpu.opt-level = 3
+vello_common.opt-level = 3
+fearless_simd.opt-level = 3
+kurbo.opt-level = 3
+peniko.opt-level = 3
+
+[build-dependencies]
+winresource = "0.1"
+
+[dev-dependencies]
+egui_kittest = "0.37"
+wiremock = "0.6"
+tempfile = "3"
+
+# Pedantic lints that the code follows, in addition to the default lints of Clippy. `lint` runs
+# Clippy with `-D warnings`, so these lints also make it fail. Put a justified exception on the
+# item with `#[expect(clippy::…)]`.
+[lints.clippy]
+assigning_clones = "warn"
+cast_lossless = "warn"
+if_not_else = "warn"
+items_after_statements = "warn"
+match_same_arms = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+unused_async = "warn"
+unused_self = "warn"

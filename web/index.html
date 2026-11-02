@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Melodia: just your music</title>
+  <link rel="canonical" href="https://melodia.nuzkito.es/">
+  <meta name="description" content="Melodia is a desktop player for Spotify on Windows, focused on what you listen to.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b0b0e">
+  <!-- Link previews. Facebook and LinkedIn read an absolute og:image only: it must have the
+       domain of the site when the site is public. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Melodia">
+  <meta property="og:url" content="https://melodia.nuzkito.es/">
+  <meta property="og:title" content="Melodia: just your music">
+  <meta property="og:description" content="A desktop player for Spotify on Windows, focused on what you listen to.">
+  <meta property="og:image" content="https://melodia.nuzkito.es/player.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Melodia window, with the playlists, the albums and singles of an artist and the queue">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true">
+    <div class="glow glow-accent"></div>
+    <div class="glow glow-complement"></div>
+  </div>
+
+  <main>
+    <section class="hero" aria-labelledby="headline">
+      <a class="brand" href="#">
+        <span class="brand-mark">
+          <img src="icon.svg" alt="" width="96" height="96">
+        </span>
+        <span class="brand-name">Melodia</span>
+      </a>
+      <h1 id="headline">Just your <span class="tinted">music</span></h1>
+      <p class="subtitle">A desktop player focused on what you listen to.</p>
+      <div class="hero-actions">
+        <a class="pill pill-download" href="https://github.com/nuzkito/melodia/releases">
+          <svg class="pill-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+            <path d="M10 3v9M6 8.5l4 4 4-4M4 16h12"/>
+          </svg>
+          Download for Windows<span class="pill-version" id="download-version" hidden></span>
+        </a>
+        <a class="text-button text-button-down" href="#install">
+          Install and set it up
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M8 3v10M4 9l4 4 4-4"/>
+          </svg>
+        </a>
+      </div>
+      <p class="hint">Windows 10 and 11, 64-bit<span aria-hidden="true">·</span>Free and open source on <a href="https://github.com/nuzkito/melodia">GitHub</a></p>
+      <figure class="shot">
+        <img src="player.png" width="1200" height="630"
+             alt="The Melodia window: the playlists and folders on the left, the albums and singles of an artist in the center and the queue on the right, with a song by the artist playing and its controls">
+      </figure>
+    </section>
+
+    <section id="install" class="guide" aria-labelledby="install-title">
+      <h2 id="install-title">Install Melodia and create your Client ID</h2>
+
+      <aside class="notice" aria-label="Personal use">
+        <span class="dot" aria-hidden="true"></span>
+        <p><strong>Melodia is for personal use.</strong> Each person connects Melodia to their own Spotify app and Client ID.</p>
+      </aside>
+
+      <section class="requirements" aria-labelledby="requirements-title">
+        <h3 id="requirements-title">Before you start</h3>
+        <p>You must have:</p>
+        <ul class="needs">
+          <li class="need">
+            <svg class="need-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="12" rx="2"/>
+              <path d="M8 20h8M12 16v4"/>
+            </svg>
+            <span>
+              <strong>Windows 10 or 11</strong>
+              <small>64-bit</small>
+            </span>
+          </li>
+          <li class="need">
+            <img class="spotify-logo" src="spotify-full-logo-white.svg" width="80" height="22" alt="Spotify">
+            <span>
+              <strong>Premium account</strong>
+              <small>Free accounts do not work</small>
+            </span>
+          </li>
+        </ul>
+      </section>
+
+      <ol class="steps">
+        <li class="step">
+          <h3>Install Melodia</h3>
+          <p>Download the installer from the <a href="https://github.com/nuzkito/melodia/releases">download page</a>. Then run the installer. It does not ask for administrator rights.</p>
+          <p>The installer does not have a signature at this time. If SmartScreen stops it, click <em>More info</em>. Then click <em>Run anyway</em>.</p>
+        </li>
+        <li class="step">
+          <h3>Create an app in the Spotify Developer Dashboard</h3>
+          <p>Open the <a href="https://developer.spotify.com/dashboard" rel="noopener">Developer Dashboard</a> and click <strong>Create app</strong>. You can give the app any name. In <strong>Redirect URIs</strong>, add this address exactly:</p>
+          <div class="copy-field">
+            <code id="redirect-uri">http://127.0.0.1:8898/callback</code>
+            <button class="copy" type="button" data-copy="redirect-uri" aria-label="Copy the redirect URI" hidden>Copy</button>
+          </div>
+        </li>
+        <li class="step">
+          <h3>Select the APIs</h3>
+          <p>In the same form, select <strong>Web API</strong> and <strong>Web Playback SDK</strong>. Then save the app.</p>
+        </li>
+        <li class="step">
+          <h3>Copy the Client ID</h3>
+          <p>Open the <strong>Settings</strong> of your app and find the Client ID. It has 32 letters and numbers.</p>
+        </li>
+        <li class="step">
+          <h3>Connect</h3>
+          <p>Open Melodia and paste the Client ID. Then click <strong>Connect to Spotify</strong>. A browser opens with a Spotify page. Accept the request on that page. Your playlists then show in Melodia.</p>
+        </li>
+      </ol>
+
+      <section class="check" aria-labelledby="check-title">
+        <h3 id="check-title">Check the download</h3>
+        <p>To make sure that the file is correct, open PowerShell in the folder of the file and run the command for that file. The hash must be the same as in <code>SHA256SUMS.txt</code> on the <a href="https://github.com/nuzkito/melodia/releases">download page</a>.</p>
+        <p>The installer:</p>
+        <div class="copy-field">
+          <code id="hash-installer">Get-FileHash .\Melodia-*-setup.exe</code>
+          <button class="copy" type="button" data-copy="hash-installer" aria-label="Copy the command that shows the hash of the installer" hidden>Copy</button>
+        </div>
+        <p>The portable version:</p>
+        <div class="copy-field">
+          <code id="hash-portable">Get-FileHash .\melodia-*-portable.zip</code>
+          <button class="copy" type="button" data-copy="hash-portable" aria-label="Copy the command that shows the hash of the portable version" hidden>Copy</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="bottom">
+    <span>Melodia</span>
+    <span aria-hidden="true">·</span>
+    <a href="https://github.com/nuzkito/melodia">Open source on GitHub</a>
+    <p class="disclaimer">Melodia is not affiliated with, endorsed by or sponsored by Spotify. Spotify is a trademark of Spotify AB.</p>
+  </footer>
+</body>
+</html>
