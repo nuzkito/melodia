@@ -21,6 +21,7 @@ use super::track_row::{ROW_HEIGHT, RowStyle, track_row};
 use super::widgets::{self, LIST_TITLE_HEIGHT};
 use crate::backend::{Command, PLAYLIST_NOT_READABLE};
 use crate::model::{PlaybackSnapshot, Playlist, PlaylistEdit, Track, find_near};
+use crate::util::format_long_duration;
 
 #[derive(Default)]
 pub struct PlaylistTracksView {
@@ -642,7 +643,8 @@ fn track_list(
 const PENCIL_SIZE: f32 = 16.0;
 const PENCIL_GAP: f32 = 8.0;
 
-/// The name of the playlist and the number of its tracks (or its owner). Esc or a second click on
+/// The name of the playlist, its owner (if it is not of the user) and the total duration of its
+/// tracks. Esc or a second click on
 /// it in the sidebar closes it. If `interactive` (not in a fade-out), a double click on the name
 /// of a playlist of the user changes the name into a field to rename it. A click on the pencil
 /// next to the name on hover does the same.
@@ -663,11 +665,16 @@ fn header_row(
         rename_field(ui, rect, title_right, open, accent, actions);
     } else {
         let playlist = &open.playlist;
-        let detail = if playlist.editable {
-            String::new()
-        } else {
-            format!("By {}", playlist.owner)
-        };
+        let owner = (!playlist.editable).then(|| format!("By {}", playlist.owner));
+        let detail = owner
+            .into_iter()
+            .chain(
+                open.tracks
+                    .as_deref()
+                    .and_then(|tracks| total_duration(tracks, playlist.total)),
+            )
+            .collect::<Vec<_>>()
+            .join(" · ");
         let renamable = interactive && playlist.editable;
         // Space for the pencil, so that a long name never goes under it.
         let pencil_room = if renamable {
@@ -675,14 +682,15 @@ fn header_row(
         } else {
             0.0
         };
-        let title = widgets::list_title(
+        let title = widgets::list_title_with_room(
             ui,
             rect,
             title_id,
             &playlist.name,
             &format!("Songs in “{}”", playlist.name),
             &detail,
-            title_right - pencil_room,
+            title_right,
+            pencil_room,
         );
         if renamable {
             let pencil = Rect::from_center_size(
@@ -740,6 +748,20 @@ fn header_row(
         );
         anim::request_frame(ui.ctx());
     }
+}
+
+/// The sum of the durations of `tracks`, for the title row. `None` if there are no tracks. If the
+/// panel shows only part of the `total` tracks, the sum is a minimum: "Over 33 h".
+fn total_duration(tracks: &[Track], total: u32) -> Option<String> {
+    if tracks.is_empty() {
+        return None;
+    }
+    let sum = format_long_duration(tracks.iter().map(|track| track.duration_ms).sum());
+    Some(if (tracks.len() as u32) < total {
+        format!("Over {sum}")
+    } else {
+        sum
+    })
 }
 
 /// The field with the new name of the open playlist, in place of its name (up to `right`). Enter,

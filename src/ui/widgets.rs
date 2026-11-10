@@ -531,6 +531,22 @@ pub fn list_title(
     detail: &str,
     detail_right: f32,
 ) -> Rect {
+    list_title_with_room(ui, rect, id, title, label, detail, detail_right, 0.0)
+}
+
+/// [`list_title`] with `room` free pixels after the title, for an icon next to it. The detail
+/// stays at `detail_right`, aligned with the details of the other lists.
+#[expect(clippy::too_many_arguments)]
+pub fn list_title_with_room(
+    ui: &Ui,
+    rect: Rect,
+    id: Id,
+    title: &str,
+    label: &str,
+    detail: &str,
+    detail_right: f32,
+    room: f32,
+) -> Rect {
     let painter = ui.painter();
     let detail_width = if detail.is_empty() {
         0.0
@@ -558,7 +574,7 @@ pub fn list_title(
         title,
         theme::strong(theme::FONT_TITLE),
         theme::TEXT,
-        (detail_right - rect.left() - detail_width).max(40.0),
+        (detail_right - rect.left() - detail_width - room).max(40.0),
     );
     let pos = pos2(rect.left(), rect.center().y - galley.size().y / 2.0 - 2.0);
     let title_rect = Rect::from_min_size(pos, galley.size());

@@ -15,6 +15,7 @@ use super::track_row::{ROW_HEIGHT, RowStyle, track_row};
 use super::widgets::{self, LIST_TITLE_HEIGHT};
 use crate::backend::Command;
 use crate::model::{Album, PlaybackSnapshot, Track};
+use crate::util::format_long_duration;
 
 /// The album that a [`link`] put here to open, until the app takes it with [`take_request`].
 fn request_key() -> Id {
@@ -29,6 +30,19 @@ const PLACEHOLDERS: Placeholders = Placeholders {
     empty_title: "No songs",
     empty_subtitle: "Spotify has no songs of this album to play.",
 };
+
+/// The detail of the title row: "1975 · 43 min". Each part shows only if it is known.
+fn detail_line(album: &Album) -> String {
+    let duration = (!album.tracks.is_empty())
+        .then(|| format_long_duration(album.tracks.iter().map(|track| track.duration_ms).sum()));
+    album
+        .year
+        .map(|year| year.to_string())
+        .into_iter()
+        .chain(duration)
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
 
 /// The name of the album in the "artist · album" line of a track (`subtitle`, drawn with `font`)
 /// opens it in the middle column. It is underlined on hover, as a link. The card of the current
@@ -138,19 +152,14 @@ impl AlbumView {
         );
         panel_ui.multiply_opacity(open_t);
         let header = Rect::from_min_size(rect.min, vec2(rect.width(), LIST_TITLE_HEIGHT));
-        let year = open
-            .item
-            .as_ref()
-            .and_then(|album| album.year)
-            .map(|year| year.to_string())
-            .unwrap_or_default();
+        let detail = open.item.as_ref().map(detail_line).unwrap_or_default();
         widgets::list_title(
             &panel_ui,
             header,
             Id::unique("album-title"),
             &open.name,
             &format!("Songs in the album “{}”", open.name),
-            &year,
+            &detail,
             header.right(),
         );
         let list = widgets::list_rows(rect, header);

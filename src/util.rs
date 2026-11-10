@@ -28,6 +28,17 @@ pub fn format_duration(ms: u64) -> String {
     }
 }
 
+/// Formats a long duration in whole minutes: "45 min", "1 h 12 min", "2 h". Less than one
+/// minute shows as "1 min", so a short list never shows "0 min".
+pub fn format_long_duration(ms: u64) -> String {
+    let minutes = ((ms + 30_000) / 60_000).max(1);
+    match (minutes / 60, minutes % 60) {
+        (0, minutes) => format!("{minutes} min"),
+        (hours, 0) => format!("{hours} h"),
+        (hours, minutes) => format!("{hours} h {minutes} min"),
+    }
+}
+
 /// `count` and the item that it counts: "1 song", "12 songs".
 pub fn plural(count: usize, one: &str, many: &str) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
@@ -91,6 +102,15 @@ mod tests {
         assert_eq!(format_duration(61_000), "1:01");
         assert_eq!(format_duration(225_000), "3:45");
         assert_eq!(format_duration(3_723_000), "1:02:03");
+    }
+
+    #[test]
+    fn formats_long_durations_in_minutes() {
+        assert_eq!(format_long_duration(0), "1 min");
+        assert_eq!(format_long_duration(225_000), "4 min");
+        assert_eq!(format_long_duration(3_600_000), "1 h");
+        assert_eq!(format_long_duration(4_329_000), "1 h 12 min");
+        assert_eq!(format_long_duration(10_790_000), "3 h");
     }
 
     #[test]

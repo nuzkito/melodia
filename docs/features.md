@@ -37,6 +37,7 @@ to [README.md](../README.md).
 
 - The sidebar shows your playlists, and the playlists that you follow or collaborate on.
 - Click ＋ to create a playlist. Double-click the name of your playlist to rename it.
+- Next to the name of an open playlist or album, the app shows the total duration of its tracks.
 - In an open playlist, drag tracks to change the order.
 - Drag a track or an album onto a playlist to add it. If the playlist already has the track, a dialog
   asks first.

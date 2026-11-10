@@ -2447,6 +2447,35 @@ fn the_card_of_a_new_folder_becomes_one_of_a_new_playlist() {
 }
 
 #[test]
+fn the_playlist_title_shows_the_total_duration_of_its_songs() {
+    let mut fixture = with_playlists(queue_fixture());
+    fixture.click(&playlist_row(&favorites()));
+    let mut tracks: Vec<Track> = (0..12)
+        .map(|i| track(&i.to_string(), "Innuendo", "Queen", "Innuendo"))
+        .collect();
+    tracks[0].duration_ms = 3_600_000;
+    fixture.send(Event::PlaylistTracks {
+        id: favorites().id,
+        tracks,
+        total: favorites().total,
+        edits: 0,
+    });
+    // One hour and 11 songs of 3:20.
+    assert!(fixture.has("1 h 37 min"));
+
+    // Of a playlist of a different user, the owner shows before the duration. The panel shows
+    // only part of the songs, so the sum is a minimum.
+    fixture.click(&playlist_row(&hits()));
+    fixture.send(Event::PlaylistTracks {
+        id: hits().id,
+        tracks: vec![bohemian()],
+        total: 600,
+        edits: 0,
+    });
+    assert!(fixture.has("By Spotify · Over 3 min"));
+}
+
+#[test]
 fn clicking_a_playlist_shows_its_tracks() {
     let mut fixture = with_playlists(queue_fixture());
     fixture.commands();
@@ -3316,7 +3345,8 @@ fn the_album_in_the_card_opens_it_in_the_middle_column() {
 
     fixture.send(Event::Album(opera()));
     fixture.harness.run_steps(4);
-    assert!(fixture.has("1975"), "the year it came out is the detail");
+    // The year it came out and the total duration of its two songs of 3:20.
+    assert!(fixture.has("1975 · 7 min"));
     assert!(fixture.has(&row(&in_opera(best_friend()))));
 
     // A song of the album plays only that song.
@@ -3392,7 +3422,7 @@ fn an_album_takes_the_place_of_the_playlist_and_back_returns_to_it() {
     fixture.commands();
     fixture.press_with(Modifiers::COMMAND, Key::ArrowRight);
     assert!(fixture.has(OPERA_SONGS));
-    assert!(fixture.has("1975"));
+    assert!(fixture.has("1975 · 7 min"));
     assert_eq!(
         fixture.commands(),
         vec![Command::LoadAlbum { id: "opera".into() }]
