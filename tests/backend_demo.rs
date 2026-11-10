@@ -873,3 +873,46 @@ async fn music_sent_to_the_phone_is_not_controlled_until_it_comes_back() {
     drop(handle);
     task.await.unwrap();
 }
+
+/// Waits until the demo has finished all commands and tasks (the idle report of the smoke test).
+async fn wait_until_idle(handle: &BackendHandle) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while !handle.work().snapshot().1 {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "timed out waiting for the demo to be idle"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn when_the_demo_is_idle_the_events_of_its_late_work_are_already_sent() {
+    let (handle, sink, commands) = backend::channel(|| {});
+    let task = tokio::spawn(demo::run(commands, sink, timings()));
+    handle.send(Command::Login { client_id: None });
+    wait_until_idle(&handle).await;
+    while handle.try_recv().is_some() {}
+
+    // The search answers after a delay, in a task of its own.
+    handle.send(Command::Search {
+        query: "Bohemian".into(),
+        offset: 0,
+    });
+    assert!(!handle.work().snapshot().1, "a sent command counts as work");
+    wait_until_idle(&handle).await;
+    let mut events = std::iter::from_fn(|| handle.try_recv());
+    assert!(events.any(|e| matches!(e, Event::SearchResults(_))));
+
+    // A cover is drawn in a blocking task.
+    handle.send(Command::LoadImage {
+        url: format!("{}tides", demo::DEMO_COVER_PREFIX),
+        max_px: 64,
+    });
+    wait_until_idle(&handle).await;
+    let mut events = std::iter::from_fn(|| handle.try_recv());
+    assert!(events.any(|e| matches!(e, Event::ImageLoaded { .. })));
+
+    drop(handle);
+    task.await.unwrap();
+}

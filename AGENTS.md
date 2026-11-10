@@ -44,7 +44,8 @@ The other services (Windows build, Wine, landing page, browsers) and the Docker 
 
 - `src/ui/` (egui) is the interface. `src/backend/` does all I/O on a Tokio thread. They communicate
   only through messages: the interface sends `Command`s and receives `Event`s
-  (`backend/protocol.rs`). The interface never does I/O and never blocks.
+  (`backend/protocol.rs`). The interface never does I/O and never blocks. The only exception is the
+  idle report of the smoke test ([testing-and-dev.md](docs/testing-and-dev.md#the-smoke-test)).
 - **Two backends, one protocol**: `live.rs` (Spotify) and `demo.rs` (fake data, for `--demo`, the
   smoke test and the screenshots). The `match`es on `Command` are exhaustive. Each new feature must
   also work in the demo.

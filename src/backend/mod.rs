@@ -16,7 +16,7 @@ mod updates;
 pub use images::{accent_color, decode_image, hsl_to_rgb, rgb_to_hsl};
 pub use protocol::{
     AuthStatus, BackendHandle, Command, CommandReceiver, DecodedImage, Event, EventSink, QueueAt,
-    Toast, ToastKind, WebPlayerStatus, channel,
+    Toast, ToastKind, WebPlayerStatus, WorkCounter, channel,
 };
 pub use timings::Timings;
 

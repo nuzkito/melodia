@@ -16,6 +16,7 @@ mod devices;
 mod dnd;
 mod guide;
 mod icons;
+mod idle_report;
 mod liked;
 mod login;
 mod navigation;
@@ -35,4 +36,5 @@ mod widgets;
 mod window_frame;
 
 pub use app::MusicApp;
+pub use idle_report::IdleReport;
 pub use search::SEARCH_FIELD_ID;

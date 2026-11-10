@@ -1,6 +1,7 @@
 //! Messages between the UI thread and the backend.
 
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
@@ -340,9 +341,46 @@ pub enum Event {
 /// The maximum time that [`BackendHandle::shut_down`] waits for the backend.
 const SHUTDOWN_WAIT: Duration = Duration::from_secs(3);
 
+/// Counts the commands and the tasks that the backend started and finished. Only the demo
+/// finishes them, for the idle report of the smoke test (see `docs/testing-and-dev.md`).
+#[derive(Debug, Default)]
+pub struct WorkCounter {
+    started: AtomicU64,
+    finished: AtomicU64,
+}
+
+impl WorkCounter {
+    fn start(&self) {
+        self.started.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn finish(&self) {
+        self.finished.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// The number of finished commands and tasks, and if all started ones are finished. The
+    /// finished count is read first. Thus a task that ends during the read shows as not finished.
+    pub fn snapshot(&self) -> (u64, bool) {
+        let finished = self.finished.load(Ordering::SeqCst);
+        let started = self.started.load(Ordering::SeqCst);
+        (finished, finished == started)
+    }
+}
+
+/// While it exists, the backend counts as busy. It ends a task that the backend spawns, so that
+/// the task counts as part of its command.
+pub struct WorkGuard(Arc<WorkCounter>);
+
+impl Drop for WorkGuard {
+    fn drop(&mut self) {
+        self.0.finish();
+    }
+}
+
 /// The UI side of the channel.
 pub struct BackendHandle {
     commands: async_mpsc::UnboundedSender<Command>,
+    work: Arc<WorkCounter>,
     events: mpsc::Receiver<Event>,
     /// Tells when the backend's thread ended, if it has a thread (see
     /// [`BackendHandle::on_stopped`]).
@@ -368,9 +406,15 @@ impl BackendHandle {
     }
 
     pub fn send(&self, command: Command) {
+        self.work.start();
         if self.commands.send(command).is_err() {
+            self.work.finish();
             log::warn!("The backend has stopped; command dropped");
         }
+    }
+
+    pub fn work(&self) -> &Arc<WorkCounter> {
+        &self.work
     }
 
     pub fn try_recv(&self) -> Option<Event> {
@@ -383,6 +427,7 @@ impl BackendHandle {
 pub struct EventSink {
     events: mpsc::Sender<Event>,
     wake: Arc<dyn Fn() + Send + Sync>,
+    work: Arc<WorkCounter>,
 }
 
 impl Drop for BackendHandle {
@@ -396,6 +441,17 @@ impl EventSink {
         if self.events.send(event).is_ok() {
             (self.wake)();
         }
+    }
+
+    /// Tells that the backend handled a command. Call it after the events of the command.
+    pub(crate) fn command_done(&self) {
+        self.work.finish();
+    }
+
+    /// Counts a spawned task as busy until the guard drops.
+    pub(crate) fn work_guard(&self) -> WorkGuard {
+        self.work.start();
+        WorkGuard(Arc::clone(&self.work))
     }
 
     pub fn toast(&self, kind: ToastKind, message: impl Into<String>) {
@@ -414,15 +470,18 @@ pub fn channel(
 ) -> (BackendHandle, EventSink, CommandReceiver) {
     let (command_tx, command_rx) = async_mpsc::unbounded_channel();
     let (event_tx, event_rx) = mpsc::channel();
+    let work = Arc::new(WorkCounter::default());
     (
         BackendHandle {
             commands: command_tx,
+            work: Arc::clone(&work),
             events: event_rx,
             stopped: None,
         },
         EventSink {
             events: event_tx,
             wake: Arc::new(wake),
+            work,
         },
         command_rx,
     )

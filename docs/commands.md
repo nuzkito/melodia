@@ -13,7 +13,7 @@ The images come from `docker/Dockerfile`. It has these stages: `dev`, `windows`,
 | --- | --- |
 | `docker compose run --rm test` | Runs `cargo nextest run --locked --all-targets`: all tests. It lists only failures and slow tests. The settings are in `.config/nextest.toml` |
 | `docker compose run --rm lint` | Runs `cargo fmt --all -- --check` and `cargo clippy --locked --all-targets -- -D warnings` |
-| `docker compose run --rm smoke` | Starts the app in demo mode on Xvfb. It drives the app with `xdotool` and saves the screenshots to `dist/screenshots/` |
+| `docker compose run --rm smoke` | Starts the app in demo mode on Xvfb, in three parts at the same time. It drives the app with `xdotool` and saves the screenshots to `dist/screenshots/`. Details in [testing-and-dev.md](testing-and-dev.md#the-smoke-test) |
 | `docker compose run --rm build-dev` | Quick build for `x86_64-pc-windows-gnu` with the `fast` profile: release without LTO, incremental. It makes only the `.exe` and `WebView2Loader.dll`. A change rebuilds in seconds, not in about 2 minutes. Use this service also for clippy on the Windows code |
 | `docker compose run --rm build-release` | Optimized build for `x86_64-pc-windows-gnu`. It puts the `.exe`, `WebView2Loader.dll`, the installer, the zip and `SHA256SUMS.txt` in `dist/`. Use it to publish |
 | `docker compose run --rm windows-smoke` | Starts `dist/melodia.exe` with Wine and saves the screenshots. Run `build-dev` or `build-release` first |

@@ -158,7 +158,10 @@ pub async fn run(mut commands: CommandReceiver, sink: EventSink, timings: Timing
     loop {
         tokio::select! {
             command = commands.recv() => match command {
-                Some(command) => demo.handle(command).await,
+                Some(command) => {
+                    demo.handle(command).await;
+                    demo.sink.command_done();
+                }
                 None => break,
             },
             _ = ticker.tick() => demo.tick(),
@@ -977,9 +980,11 @@ impl Demo {
         };
         let sink = self.sink.clone();
         let latency = self.timings.demo_search;
+        let work = self.sink.work_guard();
         tokio::spawn(async move {
             tokio::time::sleep(latency).await;
             sink.send(Event::SearchResults(page));
+            drop(work);
         });
     }
 
@@ -1026,13 +1031,17 @@ impl Demo {
 
     fn load_image(&self, url: String, max_px: u32) {
         let sink = self.sink.clone();
-        tokio::task::spawn_blocking(move || match url.strip_prefix(DEMO_COVER_PREFIX) {
-            Some(seed) => {
-                let image = render_cover(seed, max_px.clamp(16, 640));
-                let image = from_rgba(image);
-                sink.send(Event::ImageLoaded { url, max_px, image });
+        let work = self.sink.work_guard();
+        tokio::task::spawn_blocking(move || {
+            match url.strip_prefix(DEMO_COVER_PREFIX) {
+                Some(seed) => {
+                    let image = render_cover(seed, max_px.clamp(16, 640));
+                    let image = from_rgba(image);
+                    sink.send(Event::ImageLoaded { url, max_px, image });
+                }
+                None => sink.send(Event::ImageFailed { url, max_px }),
             }
-            None => sink.send(Event::ImageFailed { url, max_px }),
+            drop(work);
         });
     }
 

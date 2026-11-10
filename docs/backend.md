@@ -11,6 +11,8 @@ This file describes how the interface and the backend communicate, and how the r
 - The protocol has two backends: `live.rs` (Spotify) and `demo.rs` (fake data). The `match`
   statements on `Command` must cover all variants. Thus a new command does not compile until both
   backends handle it. Each new feature must also work in the demo.
+- A demo task that sends an event after its command ends must hold `EventSink::work_guard()`. The
+  smoke test waits for this work (see [testing-and-dev.md](testing-and-dev.md#the-smoke-test)).
 - Once at start, 2 s after `spawn`, a task checks for a new version (`backend/updates.rs`). It
   sends `Event::UpdateAvailable` if the manifest has a newer version. Neither `live::run` nor
   `demo::run` starts this check. Their tests never run it.

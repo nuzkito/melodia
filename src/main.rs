@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use eframe::egui_wgpu::{SurfaceErrorAction, WgpuConfiguration, WgpuSetup};
 use eframe::wgpu;
 use melodia::config::{APP_NAME, AppConfig};
-use melodia::ui::MusicApp;
+use melodia::ui::{IdleReport, MusicApp};
 #[cfg(windows)]
 use melodia::webplayer::{EmbeddedPlayer, HostRequest, WebPlayerHost};
 use melodia::{backend, icon, util};
@@ -20,6 +20,8 @@ const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
 const RENDERER_ENV: &str = "MELODIA_RENDERER";
 /// Development only: makes all animations instant.
 const NO_ANIMATIONS_ENV: &str = "MELODIA_NO_ANIMATIONS";
+/// Development only, in demo mode: tells the smoke test when the app is idle (`ui::IdleReport`).
+const IDLE_REPORT_ENV: &str = "MELODIA_IDLE_REPORT";
 
 fn main() -> eframe::Result {
     util::startup_mark("main started");
@@ -86,11 +88,18 @@ fn main() -> eframe::Result {
             let ctx = cc.egui_ctx.clone();
             let backend = backend::spawn(config, move || ctx.request_repaint());
             util::startup_mark("backend thread launched");
+            // The live backend does not count its work. Thus only the demo can be idle.
+            let idle_report = (demo && std::env::var_os(IDLE_REPORT_ENV).is_some())
+                .then(|| IdleReport::new(Arc::clone(backend.work())));
             let mut music = MusicApp::new(backend, demo);
             music.install(&cc.egui_ctx);
+            // After the theme, because the report changes the style.
+            if let Some(idle_report) = idle_report {
+                cc.egui_ctx.add_plugin(idle_report);
+            }
             util::startup_mark("interface installed (theme and logo textures)");
             // For the smoke test: instant transitions (as in the UI tests), so that the test can
-            // take each screenshot immediately.
+            // take each screenshot when the app is idle.
             if std::env::var_os(NO_ANIMATIONS_ENV).is_some() {
                 cc.egui_ctx
                     .all_styles_mut(|style| style.animation_time = 0.0);
