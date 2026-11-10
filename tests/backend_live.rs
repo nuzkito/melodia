@@ -13,6 +13,7 @@ use melodia::config::AppConfig;
 use melodia::model::{
     LibraryEdit, LibraryKey, Playlist, PlaylistEdit, PlaylistsStatus, QueueEdit, QueuePosition,
 };
+use melodia::playback::ENQUEUE_LEAD_MS;
 use melodia::webplayer::{
     HostRequest, PageControl, PlayerEvent, PlayerEvents, WebPlayerHost, parse_page_message,
 };
@@ -775,6 +776,10 @@ fn paused_on_pc() -> Value {
     })
 }
 
+/// A position near the end of the 4-minute tracks: half a second before the backend checks
+/// Spotify's next track (`ENQUEUE_LEAD_MS`). Thus a test does not wait for the real lead time.
+const NEAR_THE_END_MS: u64 = 240_000 - ENQUEUE_LEAD_MS - 500;
+
 /// The music that plays here when the queue tests start (see [`start_here`]).
 struct Account {
     playing: bool,
@@ -950,7 +955,7 @@ async fn moving_the_current_track_changes_what_counts_as_played() {
     let server = MockServer::start().await;
     mount_queue_account(&server).await;
     let account = Account {
-        progress_ms: 230_000, // 10 s left
+        progress_ms: NEAR_THE_END_MS,
         ..Account::default()
     };
     let (mut backend, _page, _dir) = start_with_queue(&server, &account).await;
@@ -1010,7 +1015,7 @@ async fn near_the_end_the_next_track_is_queued_in_spotify() {
     let server = MockServer::start().await;
     mount_queue_account(&server).await;
     let account = Account {
-        progress_ms: 230_000, // 10 s left
+        progress_ms: NEAR_THE_END_MS,
         ..Account::default()
     };
     let (mut backend, _page, _dir) = start_with_queue(&server, &account).await;
@@ -1094,7 +1099,7 @@ async fn edits_made_while_paused_wait_for_the_music() {
     mount_queue_account(&server).await;
     let account = Account {
         playing: false,
-        progress_ms: 230_000,
+        progress_ms: NEAR_THE_END_MS,
         ..Account::default()
     };
     let (mut backend, page, _dir) = start_with_queue(&server, &account).await;
@@ -1113,7 +1118,7 @@ async fn edits_made_while_paused_wait_for_the_music() {
     // track goes into Spotify's queue.
     backend.send(Command::Resume);
     page.wait_for_control(PageControl::Resume).await;
-    page.post(&here("a", "Under Pressure", true, 230_000));
+    page.post(&here("a", "Under Pressure", true, NEAR_THE_END_MS));
     let queued = wait_for_request(&server, "POST", "/v1/me/player/queue").await;
     assert_eq!(queued.url.query(), Some("uri=spotify%3Atrack%3Ae"));
     assert!(
@@ -3779,17 +3784,23 @@ async fn what_the_page_says_spotify_plays_next_decides_whether_to_queue_the_next
         track("c", "Killer Queen"),
         track("d", "Radio Ga Ga")
     ]);
-    // 10 s remain: the backend decides Spotify's next track now.
-    mount_playing_here(&server, 230_000, queue).await;
+    // Near the end: the backend decides Spotify's next track at the first edit.
+    mount_playing_here(&server, NEAR_THE_END_MS, queue).await;
     let page = ScriptedPage::default();
-    let (mut backend, _dir) = start_playing_here(&server, &page, 230_000).await;
+    let (mut backend, _dir) = start_playing_here(&server, &page, NEAR_THE_END_MS).await;
     backend
         .wait_for(|e| matches!(e, Event::Queue(q) if q.next.len() == 3))
         .await;
     // Spotify's queue tells Bicycle Race, but the page has newer data.
     page.post(
-        r#"{"type":"state","paused":false,"position":231000,"track_uri":"spotify:track:a",
-            "next_uris":["spotify:track:y"]}"#,
+        &json!({
+            "type": "state",
+            "paused": false,
+            "position": NEAR_THE_END_MS + 300,
+            "track_uri": "spotify:track:a",
+            "next_uris": ["spotify:track:y"]
+        })
+        .to_string(),
     );
     tokio::time::sleep(Duration::from_millis(300)).await;
 
