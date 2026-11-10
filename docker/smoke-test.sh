@@ -184,6 +184,14 @@ shot 13-drag-queue-track-to-playlist
 release
 shot 14-queue-track-added-to-playlist
 
+# A right click on «Calm» (fourth row) opens its menu, with only «Share». The row of «Share» is
+# under the pointer (y=322+4+8+20). A click copies the link, and a notice tells it.
+move 130 322
+xdotool click 3
+shot 14a-playlist-menu
+click 200 354
+shot 14b-playlist-link-copied
+
 # Click «Calm» (fourth row): its tracks fill the middle column.
 click 130 322
 shot 15-playlist-opened

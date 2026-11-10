@@ -13,6 +13,7 @@ use egui::{
 
 use super::anim::{self, bump, ease_in_out_cubic, ease_in_quad, ease_out_cubic, lerp, lerp_color};
 use super::backdrop;
+use super::context_menu::{ContextMenu, Target};
 use super::devices::text_row;
 use super::dnd::{self, DragItem, DragOrigin, Dragged, DraggedFolder};
 use super::icons;
@@ -78,6 +79,8 @@ pub struct PlaylistsView {
     /// The menu of a folder (right click), and true if it is open (it fades out after it closes).
     menu: Option<FolderMenu>,
     menu_open: bool,
+    /// The menu of a playlist (right click), with «Share».
+    playlist_menu: ContextMenu,
     /// The name that the user edits in a row. A field replaces the name.
     naming: Option<Naming>,
 }
@@ -276,6 +279,7 @@ impl PlaylistsView {
             self.last_drop = None;
             self.folder_rects.clear();
             self.menu_open = false;
+            self.playlist_menu.close();
             self.naming = None;
         }
     }
@@ -428,6 +432,8 @@ impl PlaylistsView {
         };
         self.paint_swallow(ui, textures);
         self.folder_menu(&ctx, data, actions);
+        // «Share» is its only choice, and the menu does it.
+        let _ = self.playlist_menu.show(&ctx, data.accent);
         over_list || over_crumb
     }
 
@@ -971,6 +977,7 @@ impl PlaylistsView {
                                 appear,
                                 new: false,
                                 naming: false,
+                                menu_open: self.playlist_menu.is_open_for(i),
                             };
                             let row = playlist_row(
                                 ui,
@@ -983,6 +990,10 @@ impl PlaylistsView {
                             );
                             if row.clicked {
                                 self.clicked = Some(playlist.clone());
+                            }
+                            if let Some(pos) = row.menu_at {
+                                let target = Target::playlist(playlist);
+                                self.playlist_menu.open(&ctx, target, i, pos, false);
                             }
                             if let Some(grab) = row.drag_from {
                                 dnd::start(
@@ -1138,6 +1149,7 @@ impl PlaylistsView {
                 appear,
                 new: true,
                 naming: true,
+                menu_open: false,
             };
             let playlist = new_playlist(&naming.name);
             playlist_row(ui, rect, id, &playlist, None, state, data.accent).title
@@ -1591,11 +1603,15 @@ struct RowState {
     new: bool,
     /// The user edits its name: the field is on its line in place of the name.
     naming: bool,
+    /// Its menu (right click) is open: it stays lit, as on hover.
+    menu_open: bool,
 }
 
 struct RowActions {
     /// The user clicked it: show its tracks.
     clicked: bool,
+    /// The user right-clicked here: its menu opens.
+    menu_at: Option<Pos2>,
     /// The position of its name (or of the name to come, while the user types it).
     title: Rect,
     /// The user started to drag it, from this point.
@@ -1749,7 +1765,7 @@ fn playlist_row(
     let hover = anim::tween_bool(
         &ctx,
         id.with("hover"),
-        !dragging && (response.contains_pointer() || focused),
+        !dragging && (response.contains_pointer() || focused || state.menu_open),
         0.18,
     );
     let focus = anim::tween_bool(&ctx, id.with("focus"), focused, 0.12);
@@ -1818,8 +1834,12 @@ fn playlist_row(
         icons::plus_to_check(&painter, center, 13.0, check, accent.gamma_multiply(badge));
     }
 
+    let menu_at = (!dragging && response.secondary_clicked())
+        .then(|| response.interact_pointer_pos().or(ctx.pointer_latest_pos()))
+        .flatten();
     RowActions {
         clicked: response.clicked(),
+        menu_at,
         title,
         drag_from: drag_start(&ctx, &response),
     }
@@ -1848,6 +1868,7 @@ fn creating_card(ui: &mut Ui, rect: Rect, id: Id, creating: &Creating, accent: C
         appear: 1.0,
         new: true,
         naming: false,
+        menu_open: false,
     };
     let playlist = new_playlist(&creating.name);
     playlist_row(ui, rect, id, &playlist, None, state, accent);

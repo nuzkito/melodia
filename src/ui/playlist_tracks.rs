@@ -372,7 +372,7 @@ fn accepted_drag(ctx: &Context, tracks: &[Track], editable: bool) -> Option<Drag
 
 /// The page of `playlist` in Spotify's web player.
 fn web_url(playlist: &Playlist) -> String {
-    format!("https://open.spotify.com/playlist/{}", playlist.id)
+    crate::model::web_link("playlist", &playlist.id)
 }
 
 /// The tracks. If `interactive` (not in a fade-out) and the playlist is of the user, the user can

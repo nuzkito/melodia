@@ -179,7 +179,8 @@ Both styles have a `TEXT_FAINT` placeholder and an accessible label.
 - **Breadcrumb** (in a folder): the previous level in `TEXT_DIM` (a «Back to …» button), a chevron,
   and the folder name in `TEXT`. While an item is dragged, the previous level shows an accent pill.
 - **Levels**: opening or leaving a folder slides the list 28 px while it fades in (0.28 s).
-- **Menu** (right click): `backdrop::framed`, 180 px wide, with `devices::text_row`s.
+- **Folder menu** (right click): `backdrop::framed`, 180 px wide, with `devices::text_row`s. A
+  playlist uses the menu of `context_menu.rs`.
 
 ### Explicit badge (`widgets::explicit_badge`)
 

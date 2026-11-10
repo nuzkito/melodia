@@ -40,7 +40,8 @@ Use these before you make a new widget:
   `list_title`, `empty_state`, `skeleton_rows`, `scroll_hints`, `a11y_label`,
   `full_text_tooltip` and `explicit_badge`. Also `ROW_HEIGHT` and `ROW_COVER`.
 - `track_row.rs`: the track row (▶, ♥, ＋, ✕). A right click returns `RowActions::menu_at`.
-- `context_menu.rs`: the right-click menu of a track or an album. Each view owns a `ContextMenu` and
+- `context_menu.rs`: the right-click menu of a track, an album, an artist or a playlist. «Share»
+  copies the link and asks for a notice (`toasts::request`). Each view owns a `ContextMenu` and
   turns its `Choice` into commands. `context_menu::command` has the shared commands.
 - `detail.rs`: a panel of the center column for one loaded item (cache, Esc, placeholders, links).
 - `icons.rs`: vector icons that you can animate.

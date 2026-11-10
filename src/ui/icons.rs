@@ -438,6 +438,19 @@ pub fn pencil(painter: &Painter, center: Pos2, size: f32, color: Color32) {
     painter.line_segment([point(0.26, -half), point(0.26, half)], stroke);
 }
 
+/// «Share»: three nodes, the left node linked to the two right nodes.
+pub fn share(painter: &Painter, center: Pos2, size: f32, color: Color32) {
+    let stroke = Stroke::new(size * 0.08, color);
+    let left = at(center, size, (-0.22, 0.0));
+    let top = at(center, size, (0.22, -0.26));
+    let bottom = at(center, size, (0.22, 0.26));
+    painter.line_segment([left, top], stroke);
+    painter.line_segment([left, bottom], stroke);
+    for node in [left, top, bottom] {
+        painter.circle_filled(node, size * 0.11, color);
+    }
+}
+
 const HEART_ARC_POINTS: usize = 20;
 /// The thickness of the heart's outline (times its size).
 const HEART_STROKE: f32 = 0.09;

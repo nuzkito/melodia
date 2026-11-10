@@ -51,7 +51,7 @@ pub struct SearchView {
     highlighted: Option<usize>,
     /// The highlight moved: scroll its row into view.
     scroll_to_highlighted: bool,
-    /// The menu of a song or an album, which opens with a right click.
+    /// The menu of a result, which opens with a right click.
     menu: ContextMenu,
 }
 
@@ -554,11 +554,14 @@ impl SearchView {
                                     alpha,
                                     highlighted,
                                     draggable: false,
-                                    menu_open: false,
+                                    menu_open: self.menu.is_open_for(i),
                                 },
                             );
                             if row.clicked {
                                 artist::request(&ctx, &hit.id, &hit.name);
+                            }
+                            if let Some(pos) = row.menu_at {
+                                menu_at = Some((i, pos));
                             }
                         }
                     }
@@ -568,13 +571,11 @@ impl SearchView {
                 }
                 if let Some((index, pos)) = menu_at {
                     let target = match &self.results[index] {
-                        Hit::Track(track) => Some(Target::Track(track.clone())),
-                        Hit::Album(hit) => Some(Target::album(&hit.release)),
-                        Hit::Artist(_) => None,
+                        Hit::Track(track) => Target::Track(track.clone()),
+                        Hit::Album(hit) => Target::album(&hit.release),
+                        Hit::Artist(hit) => Target::artist(hit),
                     };
-                    if let Some(target) = target {
-                        self.menu.open(&ctx, target, index, pos, false);
-                    }
+                    self.menu.open(&ctx, target, index, pos, false);
                 }
 
                 let footer_rect = Rect::from_min_size(

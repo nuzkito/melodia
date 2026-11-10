@@ -63,6 +63,18 @@ impl Track {
             format!("{} · {}", self.artist_line(), self.album)
         }
     }
+
+    /// Its page in Spotify's web player. `None` for local files, which have no page.
+    pub fn web_link(&self) -> Option<String> {
+        let id = self.uri.strip_prefix("spotify:track:")?;
+        (!id.is_empty()).then(|| web_link("track", id))
+    }
+}
+
+/// The page of the item `id` of the type `kind` ("track", "album", "artist" or "playlist") in
+/// Spotify's web player. Anyone can open it, also without the app.
+pub fn web_link(kind: &str, id: &str) -> String {
+    format!("https://open.spotify.com/{kind}/{id}")
 }
 
 /// A Spotify Connect device (desktop app, phone, speaker…).
@@ -678,6 +690,17 @@ mod tests {
             explicit: false,
             album_id: None,
         }
+    }
+
+    #[test]
+    fn a_spotify_track_has_a_web_link_and_a_local_file_has_none() {
+        let mut song = track("7tFiyTwD0nx5a1eklYtX2J");
+        assert_eq!(
+            song.web_link().as_deref(),
+            Some("https://open.spotify.com/track/7tFiyTwD0nx5a1eklYtX2J")
+        );
+        song.uri = "spotify:local:Queen:Innuendo:Innuendo:390".into();
+        assert_eq!(song.web_link(), None);
     }
 
     fn page(query: &str, artists: &[&str], albums: &[&str], songs: &[&str]) -> SearchPage {

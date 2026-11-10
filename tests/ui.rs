@@ -4332,6 +4332,125 @@ fn escape_closes_the_track_menu_but_not_the_playlist() {
     assert!(fixture.commands().is_empty());
 }
 
+impl Fixture {
+    /// Opens the menu of the row labeled `label`, clicks «Share» and returns the copied texts.
+    fn share(&mut self, label: &str) -> Vec<String> {
+        self.open_menu(label);
+        self.leftmost("Share").click();
+        let mut copied = Vec::new();
+        for _ in 0..4 {
+            self.harness.step();
+            for command in &self.harness.output().platform_output.commands {
+                if let egui::OutputCommand::CopyText(text) = command {
+                    copied.push(text.clone());
+                }
+            }
+        }
+        copied
+    }
+
+    fn toasts(&self) -> Vec<String> {
+        self.harness
+            .state()
+            .toast_messages()
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+#[test]
+fn share_copies_the_spotify_link_of_a_song_an_album_or_an_artist() {
+    let mut fixture = Fixture::logged_in();
+    fixture.click("Search");
+    fixture.harness.get_by_label("Search").type_text("queen");
+    fixture.harness.run_steps(3);
+    let song = track(
+        "4u7EnebtmKWzUH433cf5Qv",
+        "Bohemian Rhapsody",
+        "Queen",
+        "Queen II",
+    );
+    fixture.send(Event::SearchResults(SearchPage {
+        query: "queen".into(),
+        artists: vec![ArtistHit {
+            id: "1dfeR4HaWDbWqFHLkxsg1d".into(),
+            name: "Queen".into(),
+            cover: None,
+        }],
+        albums: vec![AlbumHit {
+            release: release(
+                "4ZdQAB4AbLB8SwVpBe6ywP",
+                "Queen II",
+                ReleaseKind::Album,
+                "1975-11-21",
+                12,
+            ),
+            artists: vec!["Queen".into()],
+        }],
+        tracks: vec![song.clone()],
+        total: 1,
+        ..Default::default()
+    }));
+    fixture.harness.run_steps(4);
+    fixture.commands();
+
+    fixture.open_menu("Queen — Artist");
+    assert!(fixture.has("Share"));
+    assert!(!fixture.has("Play next"), "an artist has only «Share»");
+    fixture.press(Key::Escape);
+    fixture.harness.run_steps(5);
+
+    let shares = [
+        ("Queen — Artist", "artist/1dfeR4HaWDbWqFHLkxsg1d", "Queen"),
+        (
+            "Queen II — Album · Queen",
+            "album/4ZdQAB4AbLB8SwVpBe6ywP",
+            "Queen II",
+        ),
+        (
+            &row(&song),
+            "track/4u7EnebtmKWzUH433cf5Qv",
+            "Bohemian Rhapsody",
+        ),
+    ];
+    for (label, path, name) in shares {
+        assert_eq!(
+            fixture.share(label),
+            [format!("https://open.spotify.com/{path}")]
+        );
+        assert_eq!(
+            fixture.toasts().last(),
+            Some(&format!("Copied the link to “{name}”"))
+        );
+        fixture.harness.run_steps(5);
+        assert!(!fixture.has("Share"), "the menu closes");
+    }
+    assert!(fixture.commands().is_empty());
+}
+
+#[test]
+fn share_copies_the_spotify_link_of_a_playlist_in_the_sidebar() {
+    let mut fixture = with_playlists(Fixture::logged_in());
+    fixture.commands();
+    assert_eq!(
+        fixture.share("Hits — By Spotify"),
+        ["https://open.spotify.com/playlist/hits"]
+    );
+    assert_eq!(fixture.toasts(), ["Copied the link to “Hits”"]);
+    assert!(fixture.commands().is_empty(), "the playlist does not open");
+}
+
+#[test]
+fn a_local_file_has_no_link_to_share() {
+    let mut fixture = queue_fixture();
+    let mut local = track("x", "Innuendo (demo)", "Queen", "Innuendo");
+    local.uri = "spotify:local:Queen:Innuendo:Innuendo+(demo):390".into();
+    fixture.search("innuendo", vec![local.clone()]);
+    fixture.open_menu(&row(&local));
+    assert!(fixture.has("Play next"));
+    assert!(!fixture.has("Share"));
+}
+
 /// The three commands of an album's menu, «Play», «Play next» and «Play
 /// last», for "A Night at the Opera".
 fn opera_menu_commands() -> Vec<Command> {

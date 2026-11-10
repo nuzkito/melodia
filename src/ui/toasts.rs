@@ -21,6 +21,31 @@ struct ShownToast {
     created_at: f64,
 }
 
+/// The notices that the views asked for in this frame, until the app takes them with
+/// [`take_requests`].
+#[derive(Clone, Default)]
+struct Requests(Vec<(ToastKind, String)>);
+
+fn requests_id() -> Id {
+    Id::unique("toast-requests")
+}
+
+/// Asks the app to show a notice. Views that do not own the [`Toasts`] use it.
+pub fn request(ctx: &Context, kind: ToastKind, message: String) {
+    ctx.data_mut(|d| {
+        d.get_temp_mut_or_default::<Requests>(requests_id())
+            .0
+            .push((kind, message));
+    });
+}
+
+/// The notices asked for with [`request`], oldest first.
+pub fn take_requests(ctx: &Context) -> Vec<(ToastKind, String)> {
+    ctx.data_mut(|d| d.remove_temp::<Requests>(requests_id()))
+        .map(|requests| requests.0)
+        .unwrap_or_default()
+}
+
 #[derive(Default)]
 pub struct Toasts {
     items: Vec<ShownToast>,

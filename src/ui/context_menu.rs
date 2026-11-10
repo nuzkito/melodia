@@ -1,6 +1,7 @@
-//! The right-click menu of a song or an album. Each view keeps its own [`ContextMenu`] and changes
-//! the choice into commands ([`command`] has the commands that all views share). «Like» and
-//! «Unlike» go directly to [`liked::toggle`].
+//! The right-click menu of a song, an album, an artist or a playlist. Each view keeps its own
+//! [`ContextMenu`] and changes the choice into commands ([`command`] has the commands that all
+//! views share). «Like» and «Unlike» go directly to [`liked::toggle`]. «Share» copies the link to
+//! the item in Spotify's web player.
 
 use egui::{Context, Id, Key, Margin, Order, Pos2, vec2};
 
@@ -10,8 +11,9 @@ use super::devices::menu_row;
 use super::icons;
 use super::liked;
 use super::theme;
-use crate::backend::{Command, QueueAt};
-use crate::model::{QueueEdit, Release, Track};
+use super::toasts;
+use crate::backend::{Command, QueueAt, ToastKind};
+use crate::model::{ArtistHit, Playlist, QueueEdit, Release, Track, web_link};
 
 const MENU_WIDTH: f32 = 220.0;
 
@@ -33,7 +35,20 @@ pub enum Choice {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     Track(Track),
-    Album { id: String, name: String },
+    Album {
+        id: String,
+        name: String,
+    },
+    /// The menu has only «Share».
+    Artist {
+        id: String,
+        name: String,
+    },
+    /// The menu has only «Share».
+    Playlist {
+        id: String,
+        name: String,
+    },
 }
 
 impl Target {
@@ -42,6 +57,45 @@ impl Target {
             id: release.id.clone(),
             name: release.name.clone(),
         }
+    }
+
+    pub fn artist(hit: &ArtistHit) -> Self {
+        Self::Artist {
+            id: hit.id.clone(),
+            name: hit.name.clone(),
+        }
+    }
+
+    pub fn playlist(playlist: &Playlist) -> Self {
+        Self::Playlist {
+            id: playlist.id.clone(),
+            name: playlist.name.clone(),
+        }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            Self::Track(track) => &track.name,
+            Self::Album { name, .. } | Self::Artist { name, .. } | Self::Playlist { name, .. } => {
+                name
+            }
+        }
+    }
+
+    /// The menu has «Play», «Play next» and «Play last».
+    fn playable(&self) -> bool {
+        matches!(self, Self::Track(_) | Self::Album { .. })
+    }
+
+    /// The link that «Share» copies. `None` if the item has no page in Spotify (a local file).
+    fn link(&self) -> Option<String> {
+        let (kind, id) = match self {
+            Self::Track(track) => return track.web_link(),
+            Self::Album { id, .. } => ("album", id),
+            Self::Artist { id, .. } => ("artist", id),
+            Self::Playlist { id, .. } => ("playlist", id),
+        };
+        (!id.is_empty()).then(|| web_link(kind, id))
     }
 }
 
@@ -63,7 +117,8 @@ pub fn command(choice: Choice, target: Target) -> Option<Command> {
             Some(Command::EditQueue(QueueEdit::Insert { index: 0, track }))
         }
         (Target::Track(track), Choice::PlayLast) => Some(Command::AddToQueue { track }),
-        (Target::Track(_), Choice::Play | Choice::Remove) => None,
+        (Target::Track(_), Choice::Play | Choice::Remove)
+        | (Target::Artist { .. } | Target::Playlist { .. }, _) => None,
     }
 }
 
@@ -75,6 +130,8 @@ pub struct ContextMenu {
 }
 
 struct Opened {
+    /// It is different for each opening. Thus the menus of two views can fade at the same time.
+    id: Id,
     target: Target,
     index: usize,
     pos: Pos2,
@@ -105,11 +162,15 @@ impl ContextMenu {
         pos: Pos2,
         removable: bool,
     ) {
+        let since = ctx.input(|i| i.time);
+        let id = Id::unique("context-menu").with((since.to_bits(), index));
+        anim::set_tween_value(ctx, id.with("shown"), 0.0);
         self.menu = Some(Opened {
+            id,
             target,
             index,
             pos,
-            since: ctx.input(|i| i.time),
+            since,
             removable,
         });
         self.open = true;
@@ -131,8 +192,9 @@ impl ContextMenu {
         ctx: &Context,
         accent: egui::Color32,
     ) -> Option<(Choice, usize, Target)> {
-        let shown = anim::tween_bool(ctx, Id::unique("context-menu-shown"), self.open, 0.16);
         let menu = self.menu.as_ref()?;
+        let id = menu.id;
+        let shown = anim::tween_bool(ctx, id.with("shown"), self.open, 0.16);
         if !self.open && shown <= 0.001 {
             self.menu = None;
             return None;
@@ -140,13 +202,16 @@ impl ContextMenu {
         let interactive = self.open;
         let track = match &menu.target {
             Target::Track(track) => Some(track),
-            Target::Album { .. } => None,
+            Target::Album { .. } | Target::Artist { .. } | Target::Playlist { .. } => None,
         };
+        let playable = menu.target.playable();
+        let link = menu.target.link();
         let can_like = track.is_some_and(liked::can_like);
         let liked = can_like && track.is_some_and(|t| liked::state(ctx, &t.uri) == Some(true));
         let mut choice = None;
         let mut toggle_like = false;
-        let area = egui::Area::new(Id::unique("context-menu"))
+        let mut share = false;
+        let area = egui::Area::new(id)
             .order(Order::Foreground)
             .fixed_pos(menu.pos + vec2(0.0, 4.0 - (1.0 - shown) * 8.0))
             .constrain(true)
@@ -162,7 +227,6 @@ impl ContextMenu {
                         backdrop::framed(ui, Margin::same(8), accent, |ui| {
                             ui.set_width(MENU_WIDTH);
                             ui.spacing_mut().item_spacing.y = 2.0;
-                            let id = Id::unique("context-menu");
                             let row = |ui: &mut egui::Ui, key: &str, label: &str| {
                                 menu_row(
                                     ui,
@@ -176,26 +240,28 @@ impl ContextMenu {
                                 )
                                 .clicked()
                             };
-                            let play = menu_row(
-                                ui,
-                                MENU_WIDTH,
-                                id.with("play"),
-                                "Play",
-                                None,
-                                false,
-                                accent,
-                                |painter, center, color| {
-                                    icons::play_pause(painter, center, 16.0, 1.0, color);
-                                },
-                            );
-                            if play.clicked() {
-                                choice = Some(Choice::Play);
-                            }
-                            if row(ui, "next", "Play next") {
-                                choice = Some(Choice::PlayNext);
-                            }
-                            if row(ui, "last", "Play last") {
-                                choice = Some(Choice::PlayLast);
+                            if playable {
+                                let play = menu_row(
+                                    ui,
+                                    MENU_WIDTH,
+                                    id.with("play"),
+                                    "Play",
+                                    None,
+                                    false,
+                                    accent,
+                                    |painter, center, color| {
+                                        icons::play_pause(painter, center, 16.0, 1.0, color);
+                                    },
+                                );
+                                if play.clicked() {
+                                    choice = Some(Choice::Play);
+                                }
+                                if row(ui, "next", "Play next") {
+                                    choice = Some(Choice::PlayNext);
+                                }
+                                if row(ui, "last", "Play last") {
+                                    choice = Some(Choice::PlayLast);
+                                }
                             }
                             if can_like {
                                 let label = if liked { "Unlike" } else { "Like" };
@@ -217,6 +283,21 @@ impl ContextMenu {
                                 );
                                 toggle_like = like.clicked();
                             }
+                            if link.is_some() {
+                                share = menu_row(
+                                    ui,
+                                    MENU_WIDTH,
+                                    id.with("share"),
+                                    "Share",
+                                    None,
+                                    false,
+                                    accent,
+                                    |painter, center, color| {
+                                        icons::share(painter, center, 16.0, color);
+                                    },
+                                )
+                                .clicked();
+                            }
                             if menu.removable && row(ui, "remove", "Remove from playlist") {
                                 choice = Some(Choice::Remove);
                             }
@@ -231,7 +312,12 @@ impl ContextMenu {
         if toggle_like && let Some(track) = track {
             liked::toggle(ctx, track, !liked);
         }
-        if choice.is_some() || toggle_like {
+        if share && let Some(link) = link {
+            ctx.copy_text(link);
+            let message = format!("Copied the link to “{}”", menu.target.name());
+            toasts::request(ctx, ToastKind::Success, message);
+        }
+        if choice.is_some() || toggle_like || share {
             let chosen = choice.map(|choice| (choice, menu.index, menu.target.clone()));
             self.open = false;
             return chosen;

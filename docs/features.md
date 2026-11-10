@@ -16,9 +16,11 @@ to [README.md](../README.md).
 - More results load 10 at a time («Show more results»).
 - ▶ or a double click plays a track now. The queue stays the same.
 - Drag a track to the queue to put it at a specific place.
-- The track menu (right click) has “Play”, “Play next”, “Play last”, “Like” or “Unlike”. In your own
-  playlists, it also has “Remove from playlist”. The album menu has “Play”, “Play next” and “Play last”
-  for all its tracks.
+- The track menu (right click) has “Play”, “Play next”, “Play last”, “Like” or “Unlike”, and “Share”.
+  In your own playlists, it also has “Remove from playlist”. The album menu has “Play”, “Play next”
+  and “Play last” for all its tracks, and “Share”.
+- “Share” copies the link to the item in Spotify. Tracks, albums, artists (in the search results) and
+  playlists (right-click them in the left column) have it. Local files have no link.
 
 ## Queue
 

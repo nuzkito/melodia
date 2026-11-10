@@ -318,6 +318,9 @@ impl MusicApp {
             self.playlist_adds.show(&ctx, accent);
             self.changelog.show(&ctx, accent);
         }
+        for (kind, message) in super::toasts::take_requests(&ctx) {
+            self.toasts.push(kind, message, time);
+        }
         self.toasts.show(&ctx, time, accent);
 
         for (url, max_px) in self.textures.take_requests() {
